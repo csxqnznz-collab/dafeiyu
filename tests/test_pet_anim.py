@@ -98,7 +98,7 @@ except Exception:
     pass
 if bbox:
     overflow = []
-    for role in ("idle", "click", "eat", "stretch", "walk", "run", "drag"):
+    for role in pet_anim.ROLE_CLIPS:
         for cid in pet_anim.ROLE_CLIPS[role]:
             b = bbox.get(cid)
             if not b:
@@ -215,7 +215,6 @@ w._anim_role = None
 w._anim_until = 0.0
 w._idle_next = 0.0
 w.dragging = False
-w.target = None
 w.move(200, 200)
 
 w._sync_anim(force=True)
@@ -260,20 +259,20 @@ for _ in range(400):
     w._maybe_idle_action()
 check("冷却期内不伸懒腰", not w.animator.plays("stretch"), str(w.animator.calls))
 
-# 走 / 跑
-w.target = (w.x() + 200, w.y() + w.height() / 2)
-w._anim_role = None
-w._anim_until = 0.0
-w.mode, w.run_mode = "line", False
-w._sync_anim()
-check("走路播走路", ("play", "walk", True) in w.animator.calls, str(w.animator.calls))
-w.run_mode = True
-w._anim_role = None
-w.animator.calls.clear()
-w._sync_anim()
-check("跑步播跑步", ("play", "run", True) in w.animator.calls, str(w.animator.calls))
-w.target = None
-w.run_mode = False
+# 1.6.0 起取消「模式」：没有走 / 跑角色，桌宠原地不动
+check("角色表里没有走 / 跑", not ({"walk", "run"} & set(pet_anim.ROLE_CLIPS)),
+      str(list(pet_anim.ROLE_CLIPS)))
+check("角色表只剩五个角色",
+      set(pet_anim.ROLE_CLIPS) == {"idle", "click", "eat", "stretch", "drag"},
+      str(list(pet_anim.ROLE_CLIPS)))
+w.move(300, 300)
+x0, y0 = w.x(), w.y()
+for _ in range(40):
+    w.tick()
+check("原地不动（不再自己走）", (w.x(), w.y()) == (x0, y0), f"{w.x()},{w.y()} vs {x0},{y0}")
+check("状态里已经没有 mode / target",
+      not hasattr(w, "mode") and not hasattr(w, "target"),
+      str([a for a in ("mode", "target") if hasattr(w, a)]))
 
 # 喂食 / 下班
 w._anim_role = None

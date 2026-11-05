@@ -2,9 +2,9 @@
 
 ![preview](docs/preview.png)
 
-一只常驻 Windows 桌面的透明鲸鱼娘：会自己溜达、跟你聊天、记住你说过的话、催你干今天的活，没人搭理的时候还会主动唠叨两句。纯本地运行，AI 后端可接 DeepSeek / Agnes AI / 任意 OpenAI 兼容接口，Key 与聊天记录全部留在本机。
+一只常驻 Windows 桌面的透明鲸鱼娘：待在原地陪着你、跟你聊天、记住你说过的话、催你干今天的活，没人搭理的时候还会主动唠叨两句。纯本地运行，AI 后端可接 DeepSeek / Agnes AI / 任意 OpenAI 兼容接口，Key 与聊天记录全部留在本机。
 
-A transparent anime-style desktop pet for Windows. She wanders around your desktop, chats with you, remembers what you said, nags you about today's to-dos, and starts talking to herself when you ignore her. Runs fully locally — DeepSeek, Agnes AI or any OpenAI-compatible endpoint; keys and chat history never leave your machine.
+A transparent anime-style desktop pet for Windows. She stays wherever you put her, plays her own animations, chats with you, remembers what you said, nags you about today's to-dos, and starts talking to herself when you ignore her. Runs fully locally — DeepSeek, Agnes AI or any OpenAI-compatible endpoint; keys and chat history never leave your machine.
 
 ![sizes](docs/sizes.png)
 
@@ -12,9 +12,8 @@ A transparent anime-style desktop pet for Windows. She wanders around your deskt
 
 | 能力    | 中文                                          | English                                                                                          |
 | ----- | ------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| 桌面行为  | 整段透明动画驱动：待机随机轮播、走路、跑步、被拖起会悬空挣扎 | Full-clip transparent animation: random idle rotation, walk, run, dangling when dragged          |
+| 桌面行为  | 整段透明动画驱动：待在原地，待机随机轮播，被拖起会悬空挣扎 | Full-clip transparent animation: stays put, random idle rotation, dangles when dragged |
 | 互动回应  | 点一下播 6 段「点击回应」之一，到点吃饭播「吃」，下班播伸懒腰        | Six click responses, a random eating clip at lunch, a big stretch when work ends                 |
-| 横向行走  | 贴着一条水平线左右走，随机走或跑，停下会站立、侧身或背身                | Walks along a single horizontal line: stroll or sprint, then stands, turns side-on or faces away |
 | 大小四档  | 极小 / 小 / 中 / 大，极小只有 93px（小的正好一半），气泡自动加宽加高   | Four sizes, the smallest is just 93px tall; speech bubble auto-resizes                           |
 | AI 聊天 | 单击弹聊天框，接 DeepSeek / Agnes / 自定义接口，回复短句不啰嗦   | Click to chat through DeepSeek / Agnes / any OpenAI-compatible API                               |
 | 办公便利贴 | 头顶便利贴记今日工作，一句话拆多条，到点提醒，下班回顾                 | Sticky-note panel for today's tasks, Chinese time parsing, reminders, end-of-day review          |
@@ -45,16 +44,8 @@ Run it, right-click the pet → **⚙ API Settings** → pick a provider → pas
   | 单击 | 6 段「点击回应」随机一段 | 元气挥手 / 开心跃动 / 害羞惊讶 / 挠痒咯咯笑 / 傲娇生气 |
   | 到点吃饭（12:00） | 10 段「吃」随机一段 | 也用于双击喂食 |
   | 下班 / 下班回顾 | 「超大伸懒腰」 | 到点先伸个懒腰，再问你今天做完没 |
-  | 走路 / 跑步 | 原地踏步 · 开心小跑 | 靠移动窗口制造位移；向左走自动镜像 |
   | 被拖拽 | 「被鼠标拖拽悬空反馈」 | 松手回到待机 |
-- **四种模式**（右键菜单切换）：
-  | 模式                       | 行为                                                                         |
-  | ------------------------ | -------------------------------------------------------------------------- |
-  | 自由散步                     | 在桌面上二维漫游，走一段歇一会儿                                                           |
-  | 横向行走                     | 只贴着当前那条水平线左右走；每段路随机「走」或「跑」（跑步约 1.9 倍速）；走完停在原地待机 |
-  | 跟随鼠标                     | 追着光标跑，靠太近就站住                                                               |
-  | 原地待着                     | 不动，只播待机动画                                                          |
-  | （横向行走时拖到别处，她就在新的那条线上继续走） |                                                                            |
+- **待在原地**：她不自己走动，位置完全由你拖；拖动时播「被悬空拖拽」的挣扎动画
 - **四种大小**：极小 / 小 / 中 / 大（右键 → 大小）：
   - 极小 = 小的正好一半，身高 93px，窗口自动加宽、气泡区加高、字号缩小，长句也不会糊在脸上
   - 换档时脚底位置不动，只往上长 / 往下缩
@@ -63,9 +54,9 @@ Run it, right-click the pet → **⚙ API Settings** → pick a provider → pas
   - 左键按住：拖拽（会播「被悬空拖拽」的挣扎动画，松手会说话）
   - 单击：播「点击回应」+ 回嘴（互动台词）+ 弹出 🗨️ 聊天面板
   - 双击：喂食面板（小鱼干 / 蛋糕 / 棒棒糖 / 团子 / 钻石），选完播「吃」
-  - 右键：完整菜单（模式 / 大小 / 喂食 / 说句话 / 显示/隐藏 / 鼠标穿透 / 置顶 / 开机自启 / 退出；托盘右键是同款菜单，穿透后可从托盘解除）
+  - 右键：完整菜单（大小 / AI 模型 / 话唠模式 / 喂食 / 说句话 / 显示/隐藏 / 鼠标穿透 / 置顶 / 开机自启 / 退出；托盘右键是同款菜单，穿透后可从托盘解除）
 - **台词系统**：日常随机台词 + 互动回嘴 + 思维链心声（灰色斜体括号气泡，小概率冒出），全部取材自社区 DS 梗
-- **细节**：片段之间 0.16 秒淡入淡出、走路跑步有加减速惯性、散步自动休息、说话冷却、藏起来就暂停解码省电
+- **细节**：片段之间 0.16 秒淡入淡出、偶尔蹦一下或伸个懒腰（带冷却）、说话冷却、藏起来就暂停解码省电
 - 托盘图标、窗口置顶、鼠标穿透、开机自启、配置记忆（config.json）；穿透 / 置顶状态重启后自动恢复
 - ##### 天气查询（新增）
   - 右键菜单「查看天气」→ 调用 `wttr.in` 获取当前城市天气
@@ -225,7 +216,7 @@ python scripts/check_secrets.py --install-hook   # 装成 pre-commit，有密钥
 
 - **不再用三视图**：新版素材（`dsh-pet/`）只有整套动画，没有正面 / 侧面 / 背面三张图，
   所以桌宠本体直接由动画驱动；旧的 `sprites/` 只在没装 PyAV 的机器上兜底
-- **语义层 `pet_anim.ROLE_CLIPS`**：桌宠只认「待机 / 点击 / 吃 / 伸懒腰 / 走 / 跑 / 被拖」七个角色，
+- **语义层 `pet_anim.ROLE_CLIPS`**：桌宠只认「待机 / 点击 / 吃 / 伸懒腰 / 被拖」五个角色，
   每个角色对应一组动画 id，随机挑一段；想换某类动作用哪几段，改这张表即可，主程序不用动
 - **固定舞台裁剪**：素材是 640×360，角色只占中间约 220×276，两边全是透明留白。
   程序用同一个裁剪框（`STAGE = 150, 8, 340, 340`）和同一个缩放比（`cur_h / 276`）去裁去缩，
@@ -234,7 +225,16 @@ python scripts/check_secrets.py --install-hook   # 装成 pre-commit，有密钥
   （每段取 18 帧采样、alpha > 12 的并集），用来保证选进角色的片段不会被裁到
 - **性能**：640×360 VP9 解码 + 24fps 播放，本机（i3-10100T）实测常驻 **5-10% 单核**、内存约 120MB；
   只在新帧到达时重绘（不再 50fps 空刷），裁剪缩放每帧只算一次并缓存，窗口隐藏时停解码器
-- **降级**：没装 PyAV → 用 `sprites/` 三视图；连 `dsh-pet/` 素材都没有 → 三视图照旧能跑
+- **降级**：没装 PyAV → 退回 `sprites/` 里的「正面」一张静图（只剩呼吸 / 摇摆 / 蹦跳），
+  动画和朝向都不用；连 `dsh-pet/` 素材都没有也一样能跑
+
+## 本版没有的东西
+
+- **没有「模式」**：1.6.0 起删掉了右键菜单里的「模式」（自由散步 / 横向行走 / 跟随鼠标 / 原地待着），
+  也删掉了走路、跑步、跟随鼠标这些自动移动行为——桌宠就待在原地播动画，位置全靠拖。
+  以前配置里残留的 `"mode"` 字段启动时会被自动丢掉，不影响使用。
+  对应的走 / 跑动画（`yuandi-piaofu-tabu`、`pangxie-zoulu`、`kai-xin-xiao-pao`）仍留在素材库里，
+  只是不再接进角色表，想要回来改 `pet_anim.ROLE_CLIPS` 就能加。
 
 ## 运行
 
@@ -293,7 +293,7 @@ pyinstaller --noconfirm --onefile --windowed --name 大肥鱼桌宠 ^
 | dsh-pet/                 | 动画素材库：114 段 WebM + 109 张 GIF + catalog.json + bbox.json + GALLERY.md + CREDITS.md                          |
 | work_panel.py            | 办公便利贴 + 工作提醒（面板 / 中文时间解析 / 提醒引擎）                                                                            |
 | memory/                  | 长期记忆引擎（存储 / 提取 / 检索 / 上下文 / 整理 / 记忆中心）                                                                      |
-| tests/                   | 自动化测试（test_pet_anim / test_anim_lib / test_modes / test_chatter / test_memory / test_integration / test_ai_settings，共 286 项） |
+| tests/                   | 自动化测试（test_pet_anim / test_anim_lib / test_size / test_chatter / test_memory / test_integration / test_ai_settings，共 264 项） |
 | docs/                    | README 展示图（preview.png / sizes.png）+ 微信收款码（wechat-pay.png）                                                 |
 | PUBLISH.md               | 发布到 GitHub 的步骤（About 简介、Topics、Release 说明、推送排错）                                                             |
 | scripts/check_secrets.py | 提交前密钥扫描（可装成 pre-commit 钩子）                                                                                  |
@@ -311,7 +311,7 @@ pyinstaller --noconfirm --onefile --windowed --name 大肥鱼桌宠 ^
 
 ## 贡献与致谢
 
-本项目基于 [1190fasheqi/dafeiyu-pet](https://github.com/1190fasheqi/dafeiyu-pet)（鲸鱼娘·大肥鱼桌宠）二次开发，在其三视图行走、喂食、天气、系统监控的基础上，重做了多服务商接口设置，并新增办公便利贴、长期记忆与话唠模式。原始项目版权与署名归原作者所有。
+本项目基于 [1190fasheqi/dafeiyu-pet](https://github.com/1190fasheqi/dafeiyu-pet)（鲸鱼娘·大肥鱼桌宠）二次开发，在其喂食、天气、系统监控的基础上，重做了多服务商接口设置，并新增办公便利贴、长期记忆与话唠模式。原始项目版权与署名归原作者所有。
 
 This project is a derivative work of [1190fasheqi/dafeiyu-pet](https://github.com/1190fasheqi/dafeiyu-pet). Original credits belong to its author.
 

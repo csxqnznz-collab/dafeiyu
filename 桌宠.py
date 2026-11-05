@@ -123,13 +123,7 @@ BUBBLE_H = 56
 MARGIN = 4
 # 「极小」= 「小」的一半（0.55 / 2），窗口太窄时气泡另外加高、加宽
 SIZE_LEVELS = {"极小": 0.275, "小": 0.55, "中": 0.7, "大": 0.9}
-SPEED = 380.0
-RUN_FACTOR = 1.9          # 横向行走时"跑步"的速度倍率
 TICK = 20
-# 模式：自由散步（二维漫游）/ 横向行走（只在地面左右走）/ 跟随鼠标 / 原地待着
-MODES = [("自由散步", "wander"), ("横向行走", "line"),
-         ("跟随鼠标", "follow"), ("原地待着", "still")]
-MODE_KEYS = [k for _, k in MODES]
 
 LINES = [
     "梁白开，更适合国人的大硬鲸模型",
@@ -432,7 +426,6 @@ class PetWindow(QWidget):
 
     def __init__(self):
         self.cfg = load_json(CONFIG_PATH, {
-            "mode": "wander",
             "size": 0.7,
             "topmost": True,
             "passthrough": False,
@@ -445,6 +438,10 @@ class PetWindow(QWidget):
             "chatter_quiet": ["23:00", "08:00"],
             "city": "汕头"
     })
+
+        # 1.6.0 起取消「模式」（自由散步 / 横向行走 / 跟随鼠标 / 原地待着），
+        # 桌宠就待在原地播动画，位置全靠拖。旧配置里的 mode 字段直接丢掉。
+        self.cfg.pop("mode", None)
 
         # 配置迁移：旧版单 Key → ai_profiles（一次即可，迁移后立刻落盘）
         try:
@@ -497,17 +494,7 @@ class PetWindow(QWidget):
         self.bubble_pt = 11
         self._apply_size_metrics()
 
-        # 状态
-        self.mode = self.cfg["mode"] if self.cfg["mode"] in MODE_KEYS else "wander"
-        self.dir = "down"
-        self.facing = 1
-        self.target = None
-        self.rest_until = 0
-        self.cur_speed = 0.0
-        self.line_y = None       # 横向行走时锁定的高度
-        self.run_mode = False    # 本段路是跑还是走
-        self.prev_key = None
-        self.cross_t = 0.0
+        # 状态（1.6.0 起没有「模式」：不再自己走动，只待在原地播动画）
         self.action = None
         self.action_t = 0.0
         self.bubble_text = ""
@@ -938,18 +925,9 @@ class PetWindow(QWidget):
             self._paint_anim(p)
             return
 
-        walking = self.target is not None and not self.dragging
-        running = walking and self.mode == "line" and self.run_mode
-        if walking:
-            if running:                       # 跑步：步子快、颠得高
-                sway = math.sin(now * 13.0) * 2.6
-                bob = -abs(math.sin(now * 7.0)) * 11.0
-            else:                             # 走路：慢悠悠晃
-                sway = math.sin(now * 9.0) * 3.5
-                bob = -abs(math.sin(now * 4.5)) * 7.0
-        else:
-            sway = math.sin(now * 2.5) * 1.5
-            bob = 0.0
+        # 三视图兜底（没装 PyAV 时才会走到这里）：原地呼吸 + 蹦跳 + 小动作
+        sway = math.sin(now * 2.5) * 1.5
+        bob = 0.0
         breath = 1.0 + 0.02 * math.sin(now * 2.5)
         scale = breath
         jump = -abs(math.sin(self.jump_t * 3.14159)) * 14 * self.jump_t if self.jump_t > 0 else 0
@@ -960,34 +938,21 @@ class PetWindow(QWidget):
             act_sy = 0.06 * math.sin(self.action_t * 3.14159)
             act_sx = -0.03 * math.sin(self.action_t * 3.14159)
 
-        def draw_one(key, opacity):
-            if key is None:
-                return
-            name, h, facing = key
-            pix = self.sprites[(name, h)]
-            ph = pix.height() * scale * (1 + act_sy)
-            pw = pix.width() * scale * (1 + act_sx)
-            dx = cx - pw / 2
-            bottom = self.bubble_h + MARGIN + self.cur_h
-            dy = bottom - ph + jump + bob
-            p.save()
-            p.setOpacity(opacity)
-            p.translate(cx, bottom)
-            p.rotate(sway + act_rot)
-            p.translate(-cx, -bottom)
-            if facing < 0:
-                p.translate(cx, 0)
-                p.scale(-1, 1)
-                p.translate(-cx, 0)
-            p.drawPixmap(QRectF(dx, dy, pw, ph), pix, QRectF(0, 0, pix.width(), pix.height()))
-            p.restore()
-
-        cur_key = self._sprite_key()
-        if self.cross_t > 0:
-            draw_one(self.prev_key, self.cross_t)
-            draw_one(cur_key, 1.0 - self.cross_t)
-        else:
-            draw_one(cur_key, 1.0)
+        key = self._sprite_key()
+        pix = self.sprites.get(key)
+        if pix is None:
+            return
+        ph = pix.height() * scale * (1 + act_sy)
+        pw = pix.width() * scale * (1 + act_sx)
+        dx = cx - pw / 2
+        bottom = self.bubble_h + MARGIN + self.cur_h
+        dy = bottom - ph + jump + bob
+        p.save()
+        p.translate(cx, bottom)
+        p.rotate(sway + act_rot)
+        p.translate(-cx, -bottom)
+        p.drawPixmap(QRectF(dx, dy, pw, ph), pix, QRectF(0, 0, pix.width(), pix.height()))
+        p.restore()
 
     def _paint_anim(self, p):
         """动画模式：把 640×360 的固定舞台按 STAGE 框裁出来，缩放后从底边对齐。
@@ -1037,16 +1002,8 @@ class PetWindow(QWidget):
         return small
 
     def _sprite_key(self):
-        name = {"left": "侧面", "right": "侧面", "up": "背面", "down": "正面"}[self.dir]
-        return (name, self.cur_h, self.facing if self.dir in ("left", "right") else 1)
-
-    def _set_dir(self, d, facing=None):
-        if d != self.dir:
-            self.prev_key = self._sprite_key()
-            self.cross_t = 1.0
-            self.dir = d
-        if facing is not None and facing != self.facing:
-            self.facing = facing
+        """三视图兜底只留正面一张（没有走跑朝向，侧面/背面用不上了）"""
+        return ("正面", self.cur_h)
 
     # ---------- 动画状态机 ----------
     def _on_anim_frame(self):
@@ -1073,13 +1030,8 @@ class PetWindow(QWidget):
         return True
 
     def _natural_role(self):
-        if self.dragging:
-            return "drag"
-        if self.target is not None:
-            if self.mode == "line" and self.run_mode:
-                return "run"
-            return "walk"
-        return "idle"
+        """桌宠只待在原地：被拖着播「拖拽」，其余时间一律待机"""
+        return "drag" if self.dragging else "idle"
 
     def _play_idle(self, force_new=False):
         """待机：默认接着刚才那段播；到点了（或明确要求）才换一段"""
@@ -1101,7 +1053,7 @@ class PetWindow(QWidget):
         return True
 
     def _sync_anim(self, force=False):
-        """每帧对一次账：该走就走、该待机就待机、该换待机片段就换"""
+        """每帧对一次账：该待机就待机、该换待机片段就换、被拖着就播拖拽"""
         if self.animator is None:
             return
         now = time.monotonic()
@@ -1116,7 +1068,6 @@ class PetWindow(QWidget):
             return
         if role == "drag":
             self._anim_until = 0.0        # 拖完了立刻回到正常状态，不接着演上个动作
-        self.animator.set_mirror(self.facing < 0)
         if role != self._anim_role or force:
             self.animator.play_role(role, loop=True)
             self._anim_role = role
@@ -1126,8 +1077,7 @@ class PetWindow(QWidget):
 
         只这一条就把常驻 CPU 从 ~13% 降到 ~7%（分层窗口每次重绘都要重新合成一遍）。
         """
-        if self.animator is not None and self.target is None \
-                and not self.dragging and self.jump_t <= 0:
+        if self.animator is not None and not self.dragging and self.jump_t <= 0:
             return
         self.update()
 
@@ -1158,8 +1108,6 @@ class PetWindow(QWidget):
         
         if self.jump_t > 0:
             self.jump_t = max(0.0, self.jump_t - 0.06)
-        if self.cross_t > 0:
-            self.cross_t = max(0.0, self.cross_t - 0.15)
         if self.action_t > 0:
             self.action_t = max(0.0, self.action_t - 0.03)
             if self.action_t == 0:
@@ -1172,114 +1120,11 @@ class PetWindow(QWidget):
         if self.dragging:
             self._repaint()
             return
-        now_ms = self.t * TICK
 
-        if self.mode == "follow":
-            cursor = self.cursor().pos()
-            screen = QApplication.screenAt(cursor) or self.screen() or QApplication.primaryScreen()
-            geo = screen.availableGeometry()
-            near = (self.x() - 100 <= cursor.x() <= self.x() + self.width() + 100 and
-                    self.y() - 100 <= cursor.y() <= self.y() + self.height() + 100)
-            if near:
-                self.target = None
-            else:
-                tx = max(geo.left(), min(geo.right() - self.width(), cursor.x() - self.width() / 2))
-                ty = max(geo.top(), min(geo.bottom() - self.height(), cursor.y() - 90))
-                self.target = (tx, ty)
-        elif self.mode == "wander":
-            if self.target is None:
-                if now_ms < self.rest_until:
-                    self._maybe_idle_action()
-                    self._repaint()
-                    return
-                geo = (self.screen() or QApplication.primaryScreen()).availableGeometry()
-                self.target = (random.randint(geo.left() + 40, geo.right() - self.width() - 40),
-                               random.randint(geo.top() + 40, geo.bottom() - self.height() - 40))
-        elif self.mode == "line":
-            if not self._line_target(now_ms):
-                self._repaint()
-                return
-        else:
-            self._maybe_idle_action()
-            self._repaint()
-            return
-
-        if self.target is not None:
-            cx, cy = self.x() + self.width() / 2, self.y() + self.height() / 2
-            dx, dy = self.target[0] - cx, self.target[1] - cy
-            dist = (dx * dx + dy * dy) ** 0.5
-            if dist < 12:
-                self.target = None
-                self.rest_until = self.t * TICK + random.randint(8000, 18000)
-                if self.mode == "line":
-                    self.run_mode = False
-                self._set_dir("down")
-            else:
-                step = self.cur_speed * TICK / 1000.0
-                nx, ny = cx + dx / dist * step, cy + dy / dist * step
-                self.move(int(nx - self.width() / 2), int(ny - self.height() / 2))
-                if self.mode == "line":
-                    # 横向行走：锁死高度，只改 x，免得走两步就漂到天花板
-                    if self.line_y is None:
-                        self.line_y = self.y()
-                    self.move(self.x(), int(self.line_y))
-                if abs(dx) > abs(dy) * 1.15:
-                    self._set_dir("left" if dx < 0 else "right", 1 if dx < 0 else -1)
-                else:
-                    self._set_dir("up" if dy < 0 else "down")
-            if random.random() < 0.002 and self.jump_t == 0:
-                self.jump_t = 0.5
-        target_speed = self._speed_now()
-        self.cur_speed += (target_speed - self.cur_speed) * 0.3
-        self._repaint()
-
-    def _speed_now(self):
-        """目标速度：横向行走每段路随机「走」或「跑」"""
-        if self.target is None:
-            return 0.0
-        if self.mode == "line" and self.run_mode:
-            return SPEED * RUN_FACTOR
-        return SPEED
-
-    def _line_target(self, now_ms):
-        """横向行走：只在当前高度左右移动，走完歇一会儿"""
-        if self.target is not None:
-            return True
-        if now_ms < self.rest_until:
-            self._line_idle()
-            return False
-
-        geo = (self.screen() or QApplication.primaryScreen()).availableGeometry()
-        lo = geo.left() + 6
-        hi = geo.right() - self.width() - 6
-        if hi <= lo + 60:
-            self.rest_until = now_ms + 4000
-            return False
-
-        self.line_y = self.y()
-        cur = self.x()
-        side = 1 if random.random() < 0.5 else -1
-        tx = cur + side * random.randint(180, 760)
-        if tx < lo or tx > hi:                 # 撞边就往另一边去
-            tx = hi if tx < lo else lo
-        if abs(tx - cur) < 90:                 # 太近了没意思，走到另一头
-            tx = hi if cur < (lo + hi) / 2 else lo
-        self.target = (tx + self.width() / 2, self.y() + self.height() / 2)
-        self.run_mode = random.random() < 0.3  # 三成概率跑起来
-        self.cur_speed = 0.0
-        return True
-
-    def _line_idle(self):
-        """横向行走停下来时：站着 / 转身背对 / 蹦一下（动画模式没有背视图，就只换片段）"""
-        if self.animator is None and random.random() < 0.05:
-            pick = random.random()
-            if pick < 0.45:
-                self._set_dir("down", 1)                       # 正面站着
-            elif pick < 0.85:
-                self._set_dir("up", 1)                         # 背身
-            else:
-                self._set_dir("left" if self.facing < 0 else "right", self.facing)  # 侧身
+        # 1.6.0 起没有「模式」：桌宠就待在原地播动画，偶尔蹦一下 / 伸懒腰 / 冒句心声，
+        # 位置完全由用户拖动决定，不再自己乱跑。
         self._maybe_idle_action()
+        self._repaint()
 
     def _maybe_idle_action(self):
         now = time.monotonic()
@@ -1374,8 +1219,6 @@ class PetWindow(QWidget):
             if self.dragging and self.drag_offset is not None:
                 pos = e.globalPosition().toPoint() - self.drag_offset
                 self.move(pos)
-                if abs(delta.x()) > 10:
-                    self._set_dir("left" if delta.x() < 0 else "right", 1 if delta.x() < 0 else -1)
                 self.update()
 
     def mouseReleaseEvent(self, e):
@@ -1384,10 +1227,6 @@ class PetWindow(QWidget):
                 self.dragging = False
                 self.drag_offset = None
                 self.drag_start_pos = None
-                self._set_dir("down", 1)
-                self.target = None
-                self.line_y = self.y()          # 拖到哪就在哪条线上走
-                self.rest_until = self.t * TICK + random.randint(6000, 14000)
                 if random.random() < 0.5:
                     self.say(random.choice(DRAG_LINES))
                 self.chat_paused = False
@@ -1531,12 +1370,6 @@ class PetWindow(QWidget):
 
     def _build_menu(self):
         m = QMenu(self)
-        mode_menu = m.addMenu("模式")
-        for label, key in MODES:
-            a = mode_menu.addAction(label)
-            a.setCheckable(True)
-            a.setChecked(self.mode == key)
-            a.triggered.connect(lambda _, k=key: self.set_mode(k))
         size_menu = m.addMenu("大小")
         for label, mult in SIZE_LEVELS.items():
             a = size_menu.addAction(label)
@@ -1657,21 +1490,6 @@ class PetWindow(QWidget):
         self._build_menu().exec(e.globalPos())
 
     # ---------- 功能 ----------
-    def set_mode(self, mode):
-        if mode not in MODE_KEYS:
-            return
-        self.mode = mode
-        self.target = None
-        self.cur_speed = 0.0
-        self.line_y = self.y()
-        self.cfg["mode"] = mode
-        self.save_cfg()
-        label = dict((k, l) for l, k in MODES).get(mode, mode)
-        self.say({"line": "我沿着地面左右溜达～",
-                  "wander": "随便逛逛去",
-                  "follow": "跟你走啦",
-                  "still": "那我在这儿待着"}.get(mode, label))
-
     def _apply_size_metrics(self):
         """按当前身高重算窗口；「极小」档额外加高、加宽，别让气泡挤成一条"""
         try:
@@ -1707,14 +1525,10 @@ class PetWindow(QWidget):
     def set_size(self, mult):
         old_h = self.height()
         self.cfg["size"] = mult
-        self.cross_t = 0.0
-        self.prev_key = None
         self._apply_size_metrics()
         dy = self.height() - old_h
         if dy:
             self.move(self.x(), self.y() - dy)      # 脚底不动，往上长
-        if self.mode == "line":
-            self.line_y = self.y()
         self.snap_into_screen()
         self.save_cfg()
         self.update()

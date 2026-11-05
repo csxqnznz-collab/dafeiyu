@@ -5,7 +5,7 @@
 所以这里定义一个固定裁剪框 `STAGE`：所有动画都按同一个框裁、同一个缩放系数缩放，
 角色在窗口里的大小和站位就永远一致，换片段不会突然变大变小或跳位置。
 
-`ROLE_CLIPS` 是语义层：桌宠只认「待机 / 点击 / 吃 / 伸懒腰 / 走 / 跑 / 被拖」，
+`ROLE_CLIPS` 是语义层：桌宠只认「待机 / 点击 / 吃 / 伸懒腰 / 被拖」五个角色，
 具体播哪一段在这里挑，换素材不用动主程序。
 
 解码沿用 anim_lib.FrameDecoder（PyAV + libvpx-vp9，只有 libvpx 才拿得到 alpha）。
@@ -48,9 +48,6 @@ ROLE_CLIPS = {
             "qi-dai-kai-fan"],
     # 伸懒腰（下班）
     "stretch": ["chaoda-shenlanyao"],
-    # 走 / 跑：都在原地，桌宠靠移动窗口制造位移
-    "walk": ["yuandi-piaofu-tabu", "pangxie-zoulu"],
-    "run": ["kai-xin-xiao-pao"],
     # 被鼠标拖着走
     "drag": ["beishubiao-tuozhuai-xuankong-fankui"],
 }
@@ -60,8 +57,6 @@ ROLE_LABEL = {
     "click": "点击回应",
     "eat": "到点吃饭",
     "stretch": "伸懒腰",
-    "walk": "走路",
-    "run": "跑步",
     "drag": "被拖动",
 }
 
