@@ -19,8 +19,8 @@ import os
 import sys
 import time
 
-from PySide6.QtCore import Qt, QThread, QTimer, QUrl, Signal
-from PySide6.QtGui import QColor, QDesktopServices, QFont, QImage, QPainter, QPixmap
+from PySide6.QtCore import QEvent, QPoint, Qt, QThread, QTimer, QUrl, Signal
+from PySide6.QtGui import QColor, QDesktopServices, QFont, QGuiApplication, QImage, QPainter, QPixmap
 from PySide6.QtWidgets import (QComboBox, QDialog, QFrame, QHBoxLayout, QLabel,
                                QLineEdit, QListWidget, QListWidgetItem, QPushButton,
                                QToolButton, QVBoxLayout, QWidget)
@@ -231,12 +231,17 @@ class AnimCanvas(QWidget):
 class AnimLibraryDialog(QDialog):
     """动画库浏览面板"""
 
+    _last_pos: QPoint | None = None      # 记住上次拖到的位置，重新打开还在原地
+
     def __init__(self, assets: str | None = None, parent=None):
         super().__init__(parent, Qt.WindowType.FramelessWindowHint |
                          Qt.WindowType.Tool | Qt.WindowType.WindowStaysOnTopHint)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setModal(True)
         self.setFixedSize(860, 560)
+        self.setMouseTracking(True)
+        self._drag_origin: QPoint | None = None
+        self._drag_win: QPoint | None = None
         self.assets = assets or ASSETS
         self.cat = load_catalog(self.assets)
         self.items = self.cat["animations"]
@@ -254,6 +259,7 @@ class AnimLibraryDialog(QDialog):
         root.setContentsMargins(0, 0, 0, 0)
         card = QFrame()
         card.setObjectName("card")
+        self.card = card
         card.setStyleSheet("""
             QFrame#card { background:#ffffff; border:1px solid #e6e8f0; border-radius:20px; }
             QLineEdit { border:1px solid #e6e8f0; border-radius:10px; padding:7px 10px;
@@ -274,6 +280,11 @@ class AnimLibraryDialog(QDialog):
         lay.setSpacing(11)
 
         head = QHBoxLayout()
+        head.setContentsMargins(0, 0, 0, 0)
+        grip = QLabel("•••")
+        grip.setToolTip("按住标题栏可以拖动窗口")
+        grip.setStyleSheet("font-size:13px; color:#c3c9d8; letter-spacing:1px;")
+        head.addWidget(grip)
         title = QLabel("动画库")
         title.setStyleSheet("font-size:16px; font-weight:600; color:#23232c;")
         head.addWidget(title)
@@ -288,7 +299,13 @@ class AnimLibraryDialog(QDialog):
                             "QToolButton:hover{color:#e05c5c;}")
         close.clicked.connect(self.reject)
         head.addWidget(close)
-        lay.addLayout(head)
+
+        # 标题栏包一层：无边框窗口没有系统标题栏，鼠标按下这里就拖窗口
+        self.head = QWidget()
+        self.head.setLayout(head)
+        self.head.setCursor(Qt.CursorShape.SizeAllCursor)
+        self.head.setToolTip("按住这里拖动窗口")
+        lay.addWidget(self.head)
 
         body = QHBoxLayout()
         body.setSpacing(14)
@@ -496,6 +513,67 @@ class AnimLibraryDialog(QDialog):
         path = abs_path(self._current, "webm", self.assets)
         if path and os.path.exists(path):
             QDesktopServices.openUrl(QUrl.fromLocalFile(os.path.dirname(path)))
+
+    # -- 拖动（frameless 窗口没有标题栏，鼠标事件自己接管）
+    def _drag_begin(self, ev):
+        self._drag_origin = ev.globalPosition().toPoint()
+        self._drag_win = self.frameGeometry().topLeft()
+        self.setCursor(Qt.CursorShape.SizeAllCursor)
+
+    def _drag_to(self, ev):
+        if self._drag_origin is None or self._drag_win is None:
+            return
+        delta = ev.globalPosition().toPoint() - self._drag_origin
+        self.move(self._drag_win + delta)
+
+    def _drag_end(self):
+        self._drag_origin = None
+        self._drag_win = None
+        self.unsetCursor()
+
+    def mousePressEvent(self, ev):
+        # 卡片空白、画布、标题栏上的按下都会冒泡到这里（列表/输入框自己吃掉了事件）
+        if ev.button() == Qt.MouseButton.LeftButton:
+            self._drag_begin(ev)
+            ev.accept()
+            return
+        super().mousePressEvent(ev)
+
+    def mouseMoveEvent(self, ev):
+        if self._drag_origin is not None and ev.buttons() & Qt.MouseButton.LeftButton:
+            self._drag_to(ev)
+            ev.accept()
+            return
+        super().mouseMoveEvent(ev)
+
+    def mouseReleaseEvent(self, ev):
+        if self._drag_origin is not None:
+            self._drag_end()          # 松手只收尾，不再移动：避免位置跳一下
+            type(self)._last_pos = self.pos()
+            ev.accept()
+            return
+        super().mouseReleaseEvent(ev)
+
+    # -- 位置：记住上次拖到的地方，并且永远别掉到屏幕外
+    def _clamp_to_screen(self, pos: QPoint) -> QPoint:
+        scr = QGuiApplication.screenAt(pos + QPoint(self.width() // 2, 10)) \
+            or QGuiApplication.primaryScreen()
+        if scr is None:
+            return pos
+        g = scr.availableGeometry()
+        x = max(g.left(), min(g.right() - self.width() + 1, pos.x()))
+        y = max(g.top(), min(g.bottom() - self.height() + 1, pos.y()))
+        return QPoint(x, y)
+
+    def showEvent(self, ev):
+        super().showEvent(ev)
+        if self._last_pos is not None:
+            self.move(self._clamp_to_screen(self._last_pos))
+        else:
+            g = (self.screen() or QGuiApplication.primaryScreen()).availableGeometry()
+            self.move(self._clamp_to_screen(
+                QPoint(g.center().x() - self.width() // 2,
+                       g.center().y() - self.height() // 2)))
 
     # -- 生命周期
     def closeEvent(self, e):

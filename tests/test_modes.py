@@ -83,16 +83,28 @@ check("启动即为极小身高", w.cur_h == h_tiny, str(w.cur_h))
 check("极小窗口加宽到能放气泡", w.win_w >= 168, str(w.win_w))
 check("极小气泡区加高、字号变小", w.bubble_h == 88 and w.bubble_pt == 10,
       f"{w.bubble_h}/{w.bubble_pt}")
-check("窗口高度 = 身高 + 气泡 + 边距",
-      w.height() == w.cur_h + w.bubble_h + m.MARGIN * 2 + 10, str(w.height()))
-key = w._sprite_key()
-check("极小也有精灵（正面）", key[1] == h_tiny and key[0] == "正面", str(key))
+if w.animator is not None:
+    # 动画模式：窗口 = 气泡 + 舞台（源 340×340 按 cur_h/276 缩放）
+    _dw, _dh = m.pet_anim.stage_size(w.cur_h)
+    check("窗口高度 = 气泡 + 动画舞台",
+          w.height() == w.bubble_h + m.MARGIN + int(_dh), f"{w.height()} vs {_dh}")
+    check("不再加载三视图精灵", w.sprites == {}, str(list(w.sprites)[:3]))
+    key = w._sprite_key()
+    check("极小也有精灵（正面）", key[1] == h_tiny and key[0] == "正面", str(key))
+else:
+    check("窗口高度 = 身高 + 气泡 + 边距",
+          w.height() == w.cur_h + w.bubble_h + m.MARGIN * 2 + 10, str(w.height()))
+    key = w._sprite_key()
+    check("极小也有精灵（正面）", key[1] == h_tiny and key[0] == "正面", str(key))
 
-# 三视图都在
+# 三视图都在（仅三视图兜底模式）
 for d, name in (("down", "正面"), ("left", "侧面"), ("right", "侧面"), ("up", "背面")):
     w._set_dir(d, -1 if d == "left" else 1)
     k = w._sprite_key()
-    check(f"极小档 {d} 用 {name}", k[0] == name and k[1] == h_tiny, str(k))
+    if w.animator is None:
+        check(f"极小档 {d} 用 {name}", k[0] == name and k[1] == h_tiny, str(k))
+    else:
+        check(f"极小档 {d} 不再切三视图", w.sprites == {}, str(k))
 
 # 换档：脚底不动
 w.move(200, 200)
@@ -112,8 +124,12 @@ close(w)
 
 # 配置里出现怪值也不该崩
 w = make_pet(size=0.333)
-check("怪尺寸自动吸附到最近档位", w.cur_h in (187, 238, 93), str(w.cur_h))
-check("怪尺寸仍能取到精灵", (w._sprite_key()[0], w.cur_h) in w.sprites, str(w._sprite_key()))
+if w.animator is not None:
+    check("怪尺寸按比例换算（不再吸附档位）", 100 < w.cur_h < 130, str(w.cur_h))
+    check("怪尺寸也能算舞台", w.win_w > 0 and w.height() > w.bubble_h, str(w.size()))
+else:
+    check("怪尺寸自动吸附到最近档位", w.cur_h in (187, 238, 93), str(w.cur_h))
+    check("怪尺寸仍能取到精灵", (w._sprite_key()[0], w.cur_h) in w.sprites, str(w._sprite_key()))
 close(w)
 
 
@@ -191,7 +207,7 @@ for _ in range(300):
     runs += 1 if w.run_mode else 0
 check("走/跑都会出现（约三成跑步）", 60 <= runs <= 140, f"{runs}/300")
 
-# 停下来时的姿态：站着 / 背身 / 侧身
+# 停下来时的姿态：站着 / 背身 / 侧身（动画模式没有背视图，只换待机片段）
 random.seed(7)
 w.target = None
 w.rest_until = 10 ** 12
@@ -199,11 +215,17 @@ poses = set()
 for _ in range(600):
     w._line_idle()
     poses.add(w.dir)
-check("停下会背身（背面图）", "up" in poses, str(poses))
-check("停下会正面站立", "down" in poses, str(poses))
-check("停下会侧身", bool(poses & {"left", "right"}), str(poses))
+if w.animator is not None:
+    check("动画模式停下不改朝向（没有背视图）", poses == {w.dir}, str(poses))
+else:
+    check("停下会背身（背面图）", "up" in poses, str(poses))
+    check("停下会正面站立", "down" in poses, str(poses))
+    check("停下会侧身", bool(poses & {"left", "right"}), str(poses))
 w._set_dir("up", 1)
-check("背身取背面精灵", w._sprite_key()[0] == "背面", str(w._sprite_key()))
+if w.animator is None:
+    check("背身取背面精灵", w._sprite_key()[0] == "背面", str(w._sprite_key()))
+else:
+    check("动画模式背身也还是同一套动画", w.sprites == {}, str(w._sprite_key()))
 
 # 到达目标 → 停下休息，不再移动
 w.move(300, 300)

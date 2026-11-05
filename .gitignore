@@ -40,3 +40,4 @@ __pycache__/
 
 # 临时截图
 _*.png
+_probe/

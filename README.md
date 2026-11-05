@@ -12,7 +12,8 @@ A transparent anime-style desktop pet for Windows. She wanders around your deskt
 
 | 能力    | 中文                                          | English                                                                                          |
 | ----- | ------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| 桌面行为  | 三视图行走（侧面镜像 / 正面 / 背面），自由散步、跟随鼠标、原地待着，呼吸摇摆蹦跳 | Three-view sprites, wander / follow cursor / stay still, breathing & bobbing animation           |
+| 桌面行为  | 整段透明动画驱动：待机随机轮播、走路、跑步、被拖起会悬空挣扎 | Full-clip transparent animation: random idle rotation, walk, run, dangling when dragged          |
+| 互动回应  | 点一下播 6 段「点击回应」之一，到点吃饭播「吃」，下班播伸懒腰        | Six click responses, a random eating clip at lunch, a big stretch when work ends                 |
 | 横向行走  | 贴着一条水平线左右走，随机走或跑，停下会站立、侧身或背身                | Walks along a single horizontal line: stroll or sprint, then stands, turns side-on or faces away |
 | 大小四档  | 极小 / 小 / 中 / 大，极小只有 93px（小的正好一半），气泡自动加宽加高   | Four sizes, the smallest is just 93px tall; speech bubble auto-resizes                           |
 | AI 聊天 | 单击弹聊天框，接 DeepSeek / Agnes / 自定义接口，回复短句不啰嗦   | Click to chat through DeepSeek / Agnes / any OpenAI-compatible API                               |
@@ -37,26 +38,34 @@ Run it, right-click the pet → **⚙ API Settings** → pick a provider → pas
 
 ## 功能（详细说明 · 中文）
 
-- **三视图行走**：左右走用侧面（自动镜像）、向上走用背面、向下走用正面
+- **动画驱动**：桌宠本体就是一段段 640×360 的透明动画，不再用固定的正/侧/背三视图
+  | 场景 | 播什么 | 说明 |
+  | --- | --- | --- |
+  | 待机 | 5 段「待机」随机轮播 | 每 11-21 秒换一段，同一段不连着播 |
+  | 单击 | 6 段「点击回应」随机一段 | 元气挥手 / 开心跃动 / 害羞惊讶 / 挠痒咯咯笑 / 傲娇生气 |
+  | 到点吃饭（12:00） | 10 段「吃」随机一段 | 也用于双击喂食 |
+  | 下班 / 下班回顾 | 「超大伸懒腰」 | 到点先伸个懒腰，再问你今天做完没 |
+  | 走路 / 跑步 | 原地踏步 · 开心小跑 | 靠移动窗口制造位移；向左走自动镜像 |
+  | 被拖拽 | 「被鼠标拖拽悬空反馈」 | 松手回到待机 |
 - **四种模式**（右键菜单切换）：
   | 模式                       | 行为                                                                         |
   | ------------------------ | -------------------------------------------------------------------------- |
   | 自由散步                     | 在桌面上二维漫游，走一段歇一会儿                                                           |
-  | 横向行走                     | 只贴着当前那条水平线左右走；每段路随机「走」或「跑」（跑步约 1.9 倍速、步子更颠）；走完停在原地，随机站立 / 侧身 / **背身**（背面图） |
+  | 横向行走                     | 只贴着当前那条水平线左右走；每段路随机「走」或「跑」（跑步约 1.9 倍速）；走完停在原地待机 |
   | 跟随鼠标                     | 追着光标跑，靠太近就站住                                                               |
-  | 原地待着                     | 不动，只做呼吸、摇摆、蹦跳等小动作                                                          |
+  | 原地待着                     | 不动，只播待机动画                                                          |
   | （横向行走时拖到别处，她就在新的那条线上继续走） |                                                                            |
 - **四种大小**：极小 / 小 / 中 / 大（右键 → 大小）：
   - 极小 = 小的正好一半，身高 93px，窗口自动加宽、气泡区加高、字号缩小，长句也不会糊在脸上
   - 换档时脚底位置不动，只往上长 / 往下缩
   - 所以配置里的旧尺寸（如手动改成怪值）会自动吸附到最近档位
 - **互动**：
-  - 左键按住：拖拽（会侧身朝向拖动方向，松手会说话）
-  - 单击：蹦跳 + 回嘴（互动台词）+ 弹出 🗨️ 聊天面板
-  - 双击：喂食面板（小鱼干 / 蛋糕 / 棒棒糖 / 团子 / 钻石）
+  - 左键按住：拖拽（会播「被悬空拖拽」的挣扎动画，松手会说话）
+  - 单击：播「点击回应」+ 回嘴（互动台词）+ 弹出 🗨️ 聊天面板
+  - 双击：喂食面板（小鱼干 / 蛋糕 / 棒棒糖 / 团子 / 钻石），选完播「吃」
   - 右键：完整菜单（模式 / 大小 / 喂食 / 说句话 / 显示/隐藏 / 鼠标穿透 / 置顶 / 开机自启 / 退出；托盘右键是同款菜单，穿透后可从托盘解除）
 - **台词系统**：日常随机台词 + 互动回嘴 + 思维链心声（灰色斜体括号气泡，小概率冒出），全部取材自社区 DS 梗
-- **细节**：呼吸 / 摇摆 / 蹦跳 / 进食动画、转向交叉淡化、加减速惯性、散步自动休息、说话冷却
+- **细节**：片段之间 0.16 秒淡入淡出、走路跑步有加减速惯性、散步自动休息、说话冷却、藏起来就暂停解码省电
 - 托盘图标、窗口置顶、鼠标穿透、开机自启、配置记忆（config.json）；穿透 / 置顶状态重启后自动恢复
 - ##### 天气查询（新增）
   - 右键菜单「查看天气」→ 调用 `wttr.in` 获取当前城市天气
@@ -212,6 +221,21 @@ python scripts/check_secrets.py --install-hook   # 装成 pre-commit，有密钥
   「现在说一句（试试）」可以立刻看效果
 - 参数：`config.json` 的 `chatter_level`（0-3）、`chatter_quiet`（免打扰时段，如 `["23:00","08:00"]`）
 
+##### 动画驱动（新增）
+
+- **不再用三视图**：新版素材（`dsh-pet/`）只有整套动画，没有正面 / 侧面 / 背面三张图，
+  所以桌宠本体直接由动画驱动；旧的 `sprites/` 只在没装 PyAV 的机器上兜底
+- **语义层 `pet_anim.ROLE_CLIPS`**：桌宠只认「待机 / 点击 / 吃 / 伸懒腰 / 走 / 跑 / 被拖」七个角色，
+  每个角色对应一组动画 id，随机挑一段；想换某类动作用哪几段，改这张表即可，主程序不用动
+- **固定舞台裁剪**：素材是 640×360，角色只占中间约 220×276，两边全是透明留白。
+  程序用同一个裁剪框（`STAGE = 150, 8, 340, 340`）和同一个缩放比（`cur_h / 276`）去裁去缩，
+  所以换片段时角色大小、站位、脚底线都不会跳
+- **每段动画的包围盒**：`dsh-pet/assets/bbox.json` 由 `scripts/build_anim_bbox.py` 扫描生成
+  （每段取 18 帧采样、alpha > 12 的并集），用来保证选进角色的片段不会被裁到
+- **性能**：640×360 VP9 解码 + 24fps 播放，本机（i3-10100T）实测常驻 **5-10% 单核**、内存约 120MB；
+  只在新帧到达时重绘（不再 50fps 空刷），裁剪缩放每帧只算一次并缓存，窗口隐藏时停解码器
+- **降级**：没装 PyAV → 用 `sprites/` 三视图；连 `dsh-pet/` 素材都没有 → 三视图照旧能跑
+
 ## 运行
 
 需要 **Python 3.11+**
@@ -232,19 +256,29 @@ python 桌宠.py
 
 ```bash
 pip install pyinstaller
-pyinstaller --noconfirm --onefile --windowed --name 大肥鱼桌宠 --add-data "sprites;sprites" --icon icon.ico 桌宠.py
+pyinstaller --noconfirm --onefile --windowed --name 大肥鱼桌宠 ^
+  --add-data "sprites;sprites" --add-data "dsh-pet/assets;dsh-pet/assets" ^
+  --icon icon.ico 桌宠.py
 ```
 
 产物在 `dist/大肥鱼桌宠.exe`，对方双击即用，无需安装 Python。  
+打包后要能播动画，还得把 PyAV 一起带上：`pip install av`（不加也能跑，只是退回三视图）。  
 （杀毒软件可能对 PyInstaller 产物误报，加信任即可。）
 
 ## 更换形象
 
-把新的三视图（白底）放到程序目录：
+**推荐：换动画**（新版素材就是这个路子）
 
-1. 正面.png / 侧面.png / 背面.png（原图）
-2. 运行 `python preprocess.py` —— 白底抠图 + 统一高度
-3. 运行 `python preprocess2.py` —— 边缘去污 + 预乘 alpha 缩放出各尺寸精灵
+1. 把 640×360 的 VP9-alpha webm 放进 `dsh-pet/assets/webm/`，GIF 预览放进 `dsh-pet/assets/preview/`
+2. 跑 `python scripts/build_animations_catalog.py` 重建索引
+3. 跑 `python scripts/build_anim_bbox.py` 量出每段的透明包围盒
+4. 改 `pet_anim.py` 里的 `ROLE_CLIPS`，把新片段挂到对应角色上
+
+**兜底：换三视图**（只在没有动画素材时生效）
+
+1. 正面.png / 侧面.png / 背面.png（原图）放到 `sprites/`
+2. `python preprocess.py` —— 白底抠图 + 统一高度
+3. `python preprocess2.py` —— 边缘去污 + 预乘 alpha 缩放出各尺寸精灵
 
 ## 文件说明
 
@@ -254,11 +288,12 @@ pyinstaller --noconfirm --onefile --windowed --name 大肥鱼桌宠 --add-data "
 | 桌宠.py                    | 主程序（全部逻辑）                                                                                                   |
 | ai_settings.py           | 接口设置（DeepSeek / Agnes / 自定义预设、配置读写、连接测试、设置面板）                                                               |
 | chatter.py               | 话唠模式（三档频率、素材门槛、情绪抽取、台词生成、免打扰）                                                                               |
-| anim_lib.py              | 动画库（VP9-alpha 解码、流式播放、浏览面板；PyAV 可选，缺则退回 GIF）                                                              |
-| dsh-pet/                 | 动画素材库：114 段 WebM + 109 张 GIF + catalog.json + GALLERY.md + CREDITS.md                                     |
+| anim_lib.py              | 动画库（VP9-alpha 解码、流式播放、可拖动的浏览面板；PyAV 可选，缺则退回 GIF）                                                              |
+| pet_anim.py              | 桌宠动画引擎（舞台裁剪、角色映射、片段切换与淡入淡出）                                                                       |
+| dsh-pet/                 | 动画素材库：114 段 WebM + 109 张 GIF + catalog.json + bbox.json + GALLERY.md + CREDITS.md                          |
 | work_panel.py            | 办公便利贴 + 工作提醒（面板 / 中文时间解析 / 提醒引擎）                                                                            |
 | memory/                  | 长期记忆引擎（存储 / 提取 / 检索 / 上下文 / 整理 / 记忆中心）                                                                      |
-| tests/                   | 自动化测试（test_modes.py / test_chatter.py / test_memory.py / test_integration.py / test_ai_settings.py，共 196 项） |
+| tests/                   | 自动化测试（test_pet_anim / test_anim_lib / test_modes / test_chatter / test_memory / test_integration / test_ai_settings，共 286 项） |
 | docs/                    | README 展示图（preview.png / sizes.png）+ 微信收款码（wechat-pay.png）                                                 |
 | PUBLISH.md               | 发布到 GitHub 的步骤（About 简介、Topics、Release 说明、推送排错）                                                             |
 | scripts/check_secrets.py | 提交前密钥扫描（可装成 pre-commit 钩子）                                                                                  |

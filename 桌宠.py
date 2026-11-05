@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-大肥鱼桌宠 —— 三视图透明桌宠 + Agnes AI 对话
+大肥鱼桌宠 —— 整段透明动画桌宠 + Agnes AI 对话
+桌宠本体由 dsh-pet 的 VP9-alpha 动画驱动（待机随机 / 点击回应 / 吃饭 / 伸懒腰 / 走跑 / 被拖），
+没装 PyAV 时退回 sprites/ 的三视图。
 左键单击：弹出功能列表（🗨️图标）→ 点击🗨️弹出聊天框
-聊天时只禁用移动，呼吸/摇摆/小动作正常
+聊天时只禁用移动，动画正常
 """
 import ctypes
 import psutil
@@ -53,6 +55,13 @@ try:
 except Exception as _anim_err:  # pragma: no cover
     anim_lib = None
     print(f"[桌宠] 动画库不可用：{_anim_err}")
+
+# 桌宠动画引擎：待机随机 / 点击回应 / 吃饭 / 伸懒腰 / 走跑 / 被拖
+try:
+    import pet_anim
+except Exception as _pa_err:  # pragma: no cover
+    pet_anim = None
+    print(f"[桌宠] 动画引擎不可用：{_pa_err}")
 
 # 长期记忆引擎（独立模块，出错不影响桌宠主流程）
 try:
@@ -452,18 +461,35 @@ class PetWindow(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setWindowTitle("大肥鱼桌宠")
         
-        # 精灵加载
+        # 精灵加载（只在动画引擎不可用时兜底用；新版素材没有正/侧/背三视图）
+        self.animator = None
+        self._anim_role = None
+        self._anim_until = 0.0
+        self._idle_next = 0.0
+        self._idle_clip = None
+        self._idle_action_next = 0.0
+        self._paint_cache = {}
+        if pet_anim is not None and pet_anim.available():
+            try:
+                self.animator = pet_anim.PetAnimator(parent=self)
+                self.animator.frame_changed.connect(self._on_anim_frame)
+                self.animator.clip_finished.connect(self._on_anim_clip_done)
+            except Exception as e:
+                print(f"[桌宠] 动画引擎启动失败，退回三视图：{e}")
+                self.animator = None
+
         self.sprites = {}
-        for label, mult in SIZE_LEVELS.items():
-            h = int(340 * mult)
-            for name in ["正面", "侧面", "背面"]:
-                sized = os.path.join(SPRITE_DIR, f"{name}_{h}.png")
-                if os.path.exists(sized):
-                    pix = QPixmap(sized)
-                else:
-                    pix = QPixmap(os.path.join(SPRITE_DIR, f"{name}.png")).scaledToHeight(
-                        h, Qt.TransformationMode.SmoothTransformation)
-                self.sprites[(name, h)] = pix
+        if self.animator is None:
+            for label, mult in SIZE_LEVELS.items():
+                h = int(340 * mult)
+                for name in ["正面", "侧面", "背面"]:
+                    sized = os.path.join(SPRITE_DIR, f"{name}_{h}.png")
+                    if os.path.exists(sized):
+                        pix = QPixmap(sized)
+                    else:
+                        pix = QPixmap(os.path.join(SPRITE_DIR, f"{name}.png")).scaledToHeight(
+                            h, Qt.TransformationMode.SmoothTransformation)
+                    self.sprites[(name, h)] = pix
         self.icon = QIcon(os.path.join(SPRITE_DIR, "icon.png"))
 
         self.cur_h = 0
@@ -523,7 +549,7 @@ class PetWindow(QWidget):
         self.work_store = WorkStore(os.path.join(APP_DIR, "work_items.json"))
         self.work_panel = WorkPanel(self.work_store, self)
         self.reminder_engine = ReminderEngine(self.work_store, self.say, self.work_panel.refresh,
-                                              self._on_day_review)
+                                              self._on_day_review, self._on_reminder_event)
         self.reminder_timer = QTimer(self)
         self.reminder_timer.timeout.connect(self.reminder_engine.check)
         self.reminder_timer.start(15000)
@@ -576,6 +602,7 @@ class PetWindow(QWidget):
         self.move(int(x), int(y))
         self.show()
         self.snap_into_screen()
+        self._sync_anim(force=True)      # 先出第一帧，别等 20ms 后的 tick
         if self.cfg.get("passthrough", False):
             self._apply_passthrough(True)
 
@@ -907,6 +934,10 @@ class PetWindow(QWidget):
                            Qt.AlignmentFlag.AlignCenter, l)
 
         cx = self.width() / 2
+        if self.animator is not None:
+            self._paint_anim(p)
+            return
+
         walking = self.target is not None and not self.dragging
         running = walking and self.mode == "line" and self.run_mode
         if walking:
@@ -958,6 +989,53 @@ class PetWindow(QWidget):
         else:
             draw_one(cur_key, 1.0)
 
+    def _paint_anim(self, p):
+        """动画模式：把 640×360 的固定舞台按 STAGE 框裁出来，缩放后从底边对齐。
+
+        所有片段共用同一个裁剪框和缩放比，所以换片段时角色大小、站位不会跳。
+        裁剪 + 平滑缩放每帧只做一次并缓存：直接画预缩放好的小图，
+        否则 50fps 重绘每次都缩一遍整幅 640×360，CPU 能吃掉三成。
+        """
+        img = self.animator.frame()
+        if img is None:
+            return
+        pm = self._prepared(img, self.animator.mirror)
+        x = (self.width() - pm.width()) // 2
+        y = self.height() - MARGIN - pm.height()
+        if self.jump_t > 0:
+            y -= int(abs(math.sin(self.jump_t * 3.14159)) * 14 * self.jump_t)
+
+        fade = self.animator.fade_alpha()
+        fade_img = self.animator.fade_frame()
+        if fade > 0 and fade_img is not None:      # 上一段最后一帧淡出，换片段不生硬
+            old = self._prepared(fade_img, self.animator.fade_mirror())
+            p.save()
+            p.setOpacity(fade)
+            p.drawImage((self.width() - old.width()) // 2,
+                        self.height() - MARGIN - old.height(), old)
+            p.restore()
+        p.drawImage(x, y, pm)
+
+    def _prepared(self, img, mirrored):
+        """裁剪 + 缩放成「窗口里要画的那张小图」，同一帧同一尺寸只算一次"""
+        key = (img.cacheKey(), self.cur_h, bool(mirrored))
+        hit = self._paint_cache.get(key)
+        if hit is not None:
+            return hit
+        k = pet_anim.scale_for(self.cur_h)
+        dw = max(1, int(round(pet_anim.STAGE_W * k)))
+        dh = max(1, int(round(pet_anim.STAGE_H * k)))
+        crop = img.copy(pet_anim.STAGE_X, pet_anim.STAGE_Y,
+                        pet_anim.STAGE_W, pet_anim.STAGE_H)
+        small = crop.scaled(dw, dh, Qt.AspectRatioMode.IgnoreAspectRatio,
+                            Qt.TransformationMode.SmoothTransformation)
+        if mirrored:                  # 镜像在这里做，画的时候直接贴，省一次变换
+            small = small.mirrored(True, False)
+        if len(self._paint_cache) > 4:
+            self._paint_cache.clear()
+        self._paint_cache[key] = small
+        return small
+
     def _sprite_key(self):
         name = {"left": "侧面", "right": "侧面", "up": "背面", "down": "正面"}[self.dir]
         return (name, self.cur_h, self.facing if self.dir in ("left", "right") else 1)
@@ -970,9 +1048,93 @@ class PetWindow(QWidget):
         if facing is not None and facing != self.facing:
             self.facing = facing
 
+    # ---------- 动画状态机 ----------
+    def _on_anim_frame(self):
+        self.update()
+
+    def _on_anim_clip_done(self, _clip_id):
+        """一次性动作播完 → 立刻回到当前该有的状态"""
+        self._anim_until = 0.0
+        self._anim_role = None
+        self._sync_anim(force=True)
+
+    def play_anim(self, role, hold=None, loop=False):
+        """按角色播一段（点击 / 吃饭 / 伸懒腰这类一次性动作）"""
+        if self.animator is None:
+            return False
+        cid = pet_anim.pick(role)
+        if not cid:
+            return False
+        if not self.animator.play_role(role, loop=loop):
+            return False
+        dur = float((pet_anim.clip(cid) or {}).get("duration") or 10.0)
+        self._anim_role = role
+        self._anim_until = time.monotonic() + (dur if hold is None else hold)
+        return True
+
+    def _natural_role(self):
+        if self.dragging:
+            return "drag"
+        if self.target is not None:
+            if self.mode == "line" and self.run_mode:
+                return "run"
+            return "walk"
+        return "idle"
+
+    def _play_idle(self, force_new=False):
+        """待机：默认接着刚才那段播；到点了（或明确要求）才换一段"""
+        now = time.monotonic()
+        cid = None
+        if not force_new and self._idle_clip and pet_anim.clip(self._idle_clip):
+            cid = self._idle_clip
+        else:
+            cid = pet_anim.pick("idle")
+            if cid == self._idle_clip and len(pet_anim.ROLE_CLIPS["idle"]) > 1:
+                cid = pet_anim.pick("idle")          # 同一段不连着播
+        if not cid:
+            return False
+        self.animator.set_mirror(False)
+        self.animator.play(cid, role="idle", loop=True)
+        self._idle_clip = cid
+        self._anim_role = "idle"
+        self._idle_next = now + random.uniform(11.0, 21.0)
+        return True
+
+    def _sync_anim(self, force=False):
+        """每帧对一次账：该走就走、该待机就待机、该换待机片段就换"""
+        if self.animator is None:
+            return
+        now = time.monotonic()
+        role = self._natural_role()
+        if role != "drag" and not force and now < self._anim_until:
+            return                        # 一次性动作还在演
+        if role == "idle":
+            due = now >= self._idle_next
+            if self._anim_role == "idle" and not due:
+                return
+            self._play_idle(force_new=due or self._anim_role == "idle")
+            return
+        if role == "drag":
+            self._anim_until = 0.0        # 拖完了立刻回到正常状态，不接着演上个动作
+        self.animator.set_mirror(self.facing < 0)
+        if role != self._anim_role or force:
+            self.animator.play_role(role, loop=True)
+            self._anim_role = role
+
+    def _repaint(self):
+        """动画模式站着不动时不用 50fps 空刷——新帧（24fps）会自己触发重绘。
+
+        只这一条就把常驻 CPU 从 ~13% 降到 ~7%（分层窗口每次重绘都要重新合成一遍）。
+        """
+        if self.animator is not None and self.target is None \
+                and not self.dragging and self.jump_t <= 0:
+            return
+        self.update()
+
     # ---------- 逻辑 ----------
     def tick(self):
         self.t += 1
+        self._sync_anim()
 
         # 处理后台线程（DeepSeek 等）排队的气泡消息，Qt 界面必须在主线程更新
         if self._say_queue:
@@ -1004,11 +1166,11 @@ class PetWindow(QWidget):
                 self.action = None
         
         if self.chat_paused:
-            self.update()
+            self._repaint()
             return
         
         if self.dragging:
-            self.update()
+            self._repaint()
             return
         now_ms = self.t * TICK
 
@@ -1028,18 +1190,18 @@ class PetWindow(QWidget):
             if self.target is None:
                 if now_ms < self.rest_until:
                     self._maybe_idle_action()
-                    self.update()
+                    self._repaint()
                     return
                 geo = (self.screen() or QApplication.primaryScreen()).availableGeometry()
                 self.target = (random.randint(geo.left() + 40, geo.right() - self.width() - 40),
                                random.randint(geo.top() + 40, geo.bottom() - self.height() - 40))
         elif self.mode == "line":
             if not self._line_target(now_ms):
-                self.update()
+                self._repaint()
                 return
         else:
             self._maybe_idle_action()
-            self.update()
+            self._repaint()
             return
 
         if self.target is not None:
@@ -1069,7 +1231,7 @@ class PetWindow(QWidget):
                 self.jump_t = 0.5
         target_speed = self._speed_now()
         self.cur_speed += (target_speed - self.cur_speed) * 0.3
-        self.update()
+        self._repaint()
 
     def _speed_now(self):
         """目标速度：横向行走每段路随机「走」或「跑」"""
@@ -1108,8 +1270,8 @@ class PetWindow(QWidget):
         return True
 
     def _line_idle(self):
-        """横向行走停下来时：站着 / 转身背对 / 蹦一下"""
-        if random.random() < 0.05:
+        """横向行走停下来时：站着 / 转身背对 / 蹦一下（动画模式没有背视图，就只换片段）"""
+        if self.animator is None and random.random() < 0.05:
             pick = random.random()
             if pick < 0.45:
                 self._set_dir("down", 1)                       # 正面站着
@@ -1120,14 +1282,21 @@ class PetWindow(QWidget):
         self._maybe_idle_action()
 
     def _maybe_idle_action(self):
+        now = time.monotonic()
+        if now < self._idle_action_next:        # 小动作有冷却，别一直伸懒腰
+            return
         if random.random() < 0.01:
+            self._idle_action_next = now + random.uniform(22.0, 45.0)
             pick = random.random()
             if pick < 0.35:
                 self.jump_t = 1.0
-            elif pick < 0.6:
-                self.action, self.action_t = "sway", 1.0
-            elif pick < 0.8:
-                self.action, self.action_t = "stretch", 1.0
+            elif pick < 0.78:
+                if self.animator is not None:
+                    self.play_anim("stretch")          # 原地伸个懒腰
+                elif pick < 0.6:
+                    self.action, self.action_t = "sway", 1.0
+                else:
+                    self.action, self.action_t = "stretch", 1.0
             elif pick < 0.9:
                 if self.t - self.last_speak_tick >= 1500:
                     self.last_speak_tick = self.t
@@ -1234,7 +1403,8 @@ class PetWindow(QWidget):
 
     def _on_single_click(self):
         """单击：蹦跳回嘴 + 弹出办公便利贴（再点一次收起）"""
-        if random.random() < 0.7:
+        self.play_anim("click")            # 6 段「点击回应」随机来一段
+        if self.animator is None and random.random() < 0.7:
             self.jump_t = 1.0
         if random.random() < 0.6:
             self.say(random.choice(REACT_LINES))
@@ -1260,8 +1430,10 @@ class PetWindow(QWidget):
 
     def on_food(self, food):
         self.food_panel.hide()
-        self.eat_t = 1.0
-        self.jump_t = 0.6
+        self.play_anim("eat")              # 到点吃饭：随机一段「吃」
+        if self.animator is None:
+            self.eat_t = 1.0
+            self.jump_t = 0.6
         lines = FOOD_LINES.get(food, ["好吃！"])
         self.say(random.choice(lines))
 
@@ -1274,6 +1446,13 @@ class PetWindow(QWidget):
         dlg = WorkSettingsDialog(self.work_store, self.work_panel)
         dlg.exec()
         self.work_panel.refresh()
+
+    def _on_reminder_event(self, key):
+        """提醒到点时让桌宠配合演一段：吃饭 / 下班伸懒腰"""
+        if key == "lunch":
+            self.play_anim("eat")
+        elif key in ("off", "review"):
+            self.play_anim("stretch")
 
     def _on_day_review(self, items):
         """下班回顾：便利贴里列出今天全部工作，托盘再推一条"""
@@ -1500,13 +1679,25 @@ class PetWindow(QWidget):
         except (TypeError, ValueError):
             mult = 0.7
         self.cur_h = max(60, int(340 * mult))
+        tiny = self.cur_h < 120
+        self.bubble_h = BUBBLE_H if not tiny else 88     # 气泡可用高度
+        self.bubble_pt = 11 if not tiny else 10          # 气泡字号
+
+        if self.animator is not None:
+            # 动画模式：cur_h 是「角色本体在窗口里多高」，舞台框按同一比例缩放
+            self._paint_cache.clear()
+            dw, dh = pet_anim.stage_size(self.cur_h)
+            self.win_mx = 2
+            self.win_w = int(dw) + self.win_mx * 2
+            if tiny:
+                self.win_w = max(self.win_w, 168)        # 至少能放下一行 10 个字
+            self.setFixedSize(self.win_w, self.bubble_h + MARGIN + int(dh))
+            return
+
         heights = sorted({k[1] for k in self.sprites})
         if heights and self.cur_h not in heights:      # 配置里的旧值/怪值兜底
             self.cur_h = min(heights, key=lambda x: abs(x - self.cur_h))
-        tiny = self.cur_h < 120
         self.win_mx = int(self.cur_h * 0.062) + 6
-        self.bubble_h = BUBBLE_H if not tiny else 88     # 气泡可用高度
-        self.bubble_pt = 11 if not tiny else 10          # 气泡字号
         widths = [p.width() for k, p in self.sprites.items() if k[1] == self.cur_h]
         self.win_w = (max(widths) if widths else self.cur_h) + self.win_mx * 2
         if tiny:
@@ -1582,9 +1773,13 @@ class PetWindow(QWidget):
     def toggle_visible(self):
         if self.isVisible():
             self.hide()
+            if self.animator is not None:      # 藏起来就别解码了，省电
+                self.animator.stop()
+                self._anim_role = None
         else:
             self.show()
             self.raise_()
+            self._sync_anim(force=True)
 
     def save_cfg(self):
         try:
@@ -1596,6 +1791,12 @@ class PetWindow(QWidget):
     def quit_app(self):
         self.cfg["x"], self.cfg["y"] = self.x(), self.y()
         self.save_cfg()
+        # 先停解码线程，免得线程还在跑进程就退了（PyAV 里会崩）
+        try:
+            if self.animator is not None:
+                self.animator.stop()
+        except Exception:
+            pass
         # 退出前把今天聊的整理进长期记忆（限时，超时留给下次启动继续）
         if self.memory:
             try:

@@ -180,6 +180,49 @@ check("复制的是 raw 直链", clip.startswith("https://raw.githubusercontent.
       clip)
 check("链接里带拼音文件名", "chi-xigua.gif" in clip, clip)
 
+# 拖动：无边框窗口没有系统标题栏，之前完全拖不动
+from PySide6.QtCore import QPoint, Qt  # noqa: E402
+from PySide6.QtTest import QTest  # noqa: E402
+
+dlg.move(400, 300)
+app.processEvents()
+QTest.mousePress(dlg.head, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier,
+                 QPoint(60, 10))
+app.processEvents()
+check("标题栏按下就能抓住窗口", dlg._drag_origin is not None, str(dlg._drag_origin))
+QTest.mouseMove(dlg.head, QPoint(140, 60), 20)
+app.processEvents()
+QTest.mouseRelease(dlg.head, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier,
+                   QPoint(140, 60))
+app.processEvents()
+check("拖标题栏窗口跟着走", dlg.pos() == QPoint(480, 350), str(dlg.pos()))
+check("松开后清掉拖动状态", dlg._drag_origin is None)
+check("拖完记住位置", AnimLibraryDialog._last_pos == QPoint(480, 350),
+      str(AnimLibraryDialog._last_pos))
+
+dlg.move(300, 200)
+app.processEvents()
+QTest.mousePress(dlg.card, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier,
+                 QPoint(6, 300))
+QTest.mouseMove(dlg.card, QPoint(-54, 250), 20)
+app.processEvents()
+QTest.mouseRelease(dlg.card, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier,
+                   QPoint(-54, 250))
+app.processEvents()
+check("卡片空白处也能拖", dlg.pos() == QPoint(240, 150), str(dlg.pos()))
+
+# 位置永远别掉到屏幕外
+AnimLibraryDialog._last_pos = QPoint(99999, 99999)
+dlg2 = AnimLibraryDialog()
+dlg2.show()
+app.processEvents()
+scr = dlg2.screen().availableGeometry() if dlg2.screen() else None
+inside = dlg2.pos().x() < (scr.right() if scr else 2000) and dlg2.pos().y() < (scr.bottom() if scr else 2000)
+check("记住的位置会被夹回屏幕内", inside, f"{dlg2.pos()} / {scr}")
+dlg2._stop_playback()
+dlg2.close()
+AnimLibraryDialog._last_pos = None
+
 # 关闭时停掉解码线程
 dlg._stop_playback()
 check("关闭后解码器已释放", dlg._decoder is None)

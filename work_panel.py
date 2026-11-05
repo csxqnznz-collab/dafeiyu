@@ -1105,12 +1105,13 @@ class WorkPanel(QWidget):
 
 # ---------------------------------------------------------------- 提醒引擎
 class ReminderEngine(QObject):
-    def __init__(self, store, say, on_change=None, on_review=None):
+    def __init__(self, store, say, on_change=None, on_review=None, on_event=None):
         super().__init__()
         self.store = store
         self.say = say
         self.on_change = on_change
         self.on_review = on_review      # 下班回顾：把今日全部工作列出来
+        self.on_event = on_event        # (key) 播报后让桌宠做个配合动作（吃饭/伸懒腰）
         self._booted = False            # 启动后的第一次检查可以补问下班回顾
 
     # -- 文案拼装
@@ -1237,6 +1238,11 @@ class ReminderEngine(QObject):
         after = pending[0][3] if len(pending[0]) > 3 else None
         mark()
         self._emit(msg)
+        if self.on_event:
+            try:
+                self.on_event(key)      # 播报同时播放对应小动画
+            except Exception as e:
+                print("[reminder] 联动动作失败:", e)
         if after:
             after()
 
