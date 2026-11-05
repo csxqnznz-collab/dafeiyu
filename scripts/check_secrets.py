@@ -124,6 +124,7 @@ def scan_history() -> list[str]:
                           capture_output=True, text=True).stdout.split()
     if not revs:
         return []
+    key_re = re.compile(r"sk-[A-Za-z0-9_\-]{16,}|gh[pousr]_[A-Za-z0-9]{20,}")
     problems = []
     seen = set()
     for rev in revs[:200]:
@@ -132,6 +133,10 @@ def scan_history() -> list[str]:
                               rev],
                              capture_output=True, text=True).stdout.splitlines()
         for line in out:
+            found = key_re.findall(line)
+            # 测试夹具里的假 Key（sk-test / sk-demo …）不算泄露
+            if found and all(f.lower().startswith(FAKE_PREFIX) for f in found):
+                continue
             key = line.split(":", 2)[-1][:60]
             if key in seen:
                 continue

@@ -1,14 +1,54 @@
-# 大肥鱼桌宠 🐋
+# 大肥鱼桌宠 · DaFeiYu Desk Pet 🐋
 
-DeepSeek V4 Pro 二创形象「鲸鱼娘·大肥鱼」的透明桌面宠物。
+![preview](docs/preview.png)
 
-基于三视图素材（正面 / 侧面 / 背面），用 Python + PySide6 实现，无边框透明置顶窗口。
+一只常驻 Windows 桌面的透明鲸鱼娘：会自己溜达、跟你聊天、记住你说过的话、催你干今天的活，没人搭理的时候还会主动唠叨两句。纯本地运行，AI 后端可接 DeepSeek / Agnes AI / 任意 OpenAI 兼容接口，Key 与聊天记录全部留在本机。
 
-## 功能
+A transparent anime-style desktop pet for Windows. She wanders around your desktop, chats with you, remembers what you said, nags you about today's to-dos, and starts talking to herself when you ignore her. Runs fully locally — DeepSeek, Agnes AI or any OpenAI-compatible endpoint; keys and chat history never leave your machine.
+
+![sizes](docs/sizes.png)
+
+## 功能一览 · Features
+
+| 能力 | 中文 | English |
+|---|---|---|
+| 桌面行为 | 三视图行走（侧面镜像 / 正面 / 背面），自由散步、跟随鼠标、原地待着，呼吸摇摆蹦跳 | Three-view sprites, wander / follow cursor / stay still, breathing & bobbing animation |
+| 横向行走 | 贴着一条水平线左右走，随机走或跑，停下会站立、侧身或背身 | Walks along a single horizontal line: stroll or sprint, then stands, turns side-on or faces away |
+| 大小四档 | 极小 / 小 / 中 / 大，极小只有 93px（小的正好一半），气泡自动加宽加高 | Four sizes, the smallest is just 93px tall; speech bubble auto-resizes |
+| AI 聊天 | 单击弹聊天框，接 DeepSeek / Agnes / 自定义接口，回复短句不啰嗦 | Click to chat through DeepSeek / Agnes / any OpenAI-compatible API |
+| 办公便利贴 | 头顶便利贴记今日工作，一句话拆多条，到点提醒，下班回顾 | Sticky-note panel for today's tasks, Chinese time parsing, reminders, end-of-day review |
+| 长期记忆 | 本地 SQLite 五层记忆，自动提炼、按需回忆、睡眠整理 | Five-layer local memory in SQLite: auto-extract, recall on demand, nightly consolidation |
+| 话唠模式 | 三档频率，按聊天与记忆主动开口，八种情绪，深夜免打扰 | Three chatter levels, memory-driven small talk, eight moods, quiet hours |
+| 数据隔离 | Key / 工作项 / 记忆库全部不入仓库，附密钥扫描脚本 | No keys or personal data in the repo; bundled secret scanner |
+
+## 快速开始 · Quick Start
+
+```bash
+pip install -r requirements.txt
+python 桌宠.py            # 或双击「启动桌宠.bat」
+```
+
+首次运行右键桌宠 → **⚙ 接口设置** → 选服务商 → 填 Key → 测试连接 → 保存（不填 Key 也能用桌宠本身，只是不能聊天）。
+
+Run it, right-click the pet → **⚙ API Settings** → pick a provider → paste your key → test → save. Everything except chat works without a key.
+
+## 功能（详细说明 · 中文）
 
 - **三视图行走**：左右走用侧面（自动镜像）、向上走用背面、向下走用正面
 
-- **三种模式**：自由散步 / 跟随鼠标 / 原地待着（右键菜单切换）
+- **四种模式**（右键菜单切换）：
+  | 模式 | 行为 |
+  |---|---|
+  | 自由散步 | 在桌面上二维漫游，走一段歇一会儿 |
+  | 横向行走 | 只贴着当前那条水平线左右走；每段路随机「走」或「跑」（跑步约 1.9 倍速、步子更颠）；走完停在原地，随机站立 / 侧身 / **背身**（背面图） |
+  | 跟随鼠标 | 追着光标跑，靠太近就站住 |
+  | 原地待着 | 不动，只做呼吸、摇摆、蹦跳等小动作 |
+  （横向行走时拖到别处，她就在新的那条线上继续走）
+
+- **四种大小**：极小 / 小 / 中 / 大（右键 → 大小）：
+  - 极小 = 小的正好一半，身高 93px，窗口自动加宽、气泡区加高、字号缩小，长句也不会糊在脸上
+  - 换档时脚底位置不动，只往上长 / 往下缩
+  - 所以配置里的旧尺寸（如手动改成怪值）会自动吸附到最近档位
 
 - **互动**：
   - 左键按住：拖拽（会侧身朝向拖动方向，松手会说话）
@@ -215,7 +255,9 @@ pyinstaller --noconfirm --onefile --windowed --name 大肥鱼桌宠 --add-data "
 | chatter.py | 话唠模式（三档频率、素材门槛、情绪抽取、台词生成、免打扰） |
 | work_panel.py | 办公便利贴 + 工作提醒（面板 / 中文时间解析 / 提醒引擎） |
 | memory/ | 长期记忆引擎（存储 / 提取 / 检索 / 上下文 / 整理 / 记忆中心） |
-| tests/ | 自动化测试（test_memory.py / test_integration.py / test_ai_settings.py） |
+| tests/ | 自动化测试（test_modes.py / test_chatter.py / test_memory.py / test_integration.py / test_ai_settings.py，共 196 项） |
+| docs/ | README 展示图（preview.png / sizes.png） |
+| PUBLISH.md | 发布到 GitHub 的步骤（About 简介、Topics、Release 说明、推送排错） |
 | scripts/check_secrets.py | 提交前密钥扫描（可装成 pre-commit 钩子） |
 | config.example.json | 配置模板（复制成 config.json 再填 Key） |
 | pet_launcher.pyw | 无控制台窗口的启动器 |

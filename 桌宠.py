@@ -105,9 +105,15 @@ AI_ERROR_LOG = os.path.join(APP_DIR, "ai_error.log")
 
 BUBBLE_H = 56
 MARGIN = 4
-SIZE_LEVELS = {"小": 0.55, "中": 0.7, "大": 0.9}
+# 「极小」= 「小」的一半（0.55 / 2），窗口太窄时气泡另外加高、加宽
+SIZE_LEVELS = {"极小": 0.275, "小": 0.55, "中": 0.7, "大": 0.9}
 SPEED = 380.0
+RUN_FACTOR = 1.9          # 横向行走时"跑步"的速度倍率
 TICK = 20
+# 模式：自由散步（二维漫游）/ 横向行走（只在地面左右走）/ 跟随鼠标 / 原地待着
+MODES = [("自由散步", "wander"), ("横向行走", "line"),
+         ("跟随鼠标", "follow"), ("原地待着", "still")]
+MODE_KEYS = [k for _, k in MODES]
 
 LINES = [
     "梁白开，更适合国人的大硬鲸模型",
@@ -167,10 +173,22 @@ def load_json(path, default):
 
     try:
         with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
+            data = json.load(f)
 
     except Exception:
         return default
+
+    # 配置缺字段时用默认值补齐（老版本 config.json 升级后不会 KeyError）
+    if isinstance(data, dict) and isinstance(default, dict):
+        merged = dict(default)
+        merged.update(data)
+        for k, v in default.items():
+            if isinstance(v, dict) and isinstance(merged.get(k), dict):
+                sub = dict(v)
+                sub.update(merged[k])
+                merged[k] = sub
+        return merged
+    return data
 
 
 class ChatDialog(QDialog):
@@ -441,18 +459,20 @@ class PetWindow(QWidget):
                 self.sprites[(name, h)] = pix
         self.icon = QIcon(os.path.join(SPRITE_DIR, "icon.png"))
 
-        self.cur_h = int(340 * self.cfg["size"])
-        self.win_mx = int(self.cur_h * 0.062) + 6
-        self.win_w = max(p.width() for k, p in self.sprites.items() if k[1] == self.cur_h) + self.win_mx * 2
-        self.setFixedSize(self.win_w, self.cur_h + BUBBLE_H + MARGIN * 2 + 10)
+        self.cur_h = 0
+        self.bubble_h = BUBBLE_H
+        self.bubble_pt = 11
+        self._apply_size_metrics()
 
         # 状态
-        self.mode = self.cfg["mode"] if self.cfg["mode"] in ("wander", "follow", "still") else "wander"
+        self.mode = self.cfg["mode"] if self.cfg["mode"] in MODE_KEYS else "wander"
         self.dir = "down"
         self.facing = 1
         self.target = None
         self.rest_until = 0
         self.cur_speed = 0.0
+        self.line_y = None       # 横向行走时锁定的高度
+        self.run_mode = False    # 本段路是跑还是走
         self.prev_key = None
         self.cross_t = 0.0
         self.action = None
@@ -840,12 +860,12 @@ class PetWindow(QWidget):
         now = self.t * TICK / 1000.0
 
         if self.bubble_text and now < self.bubble_until:
+            bfont = QFont(self.bubble_font)
+            bfont.setPointSize(self.bubble_pt)
             if self.bubble_inner:
-                bfont = QFont(self.bubble_font)
                 bfont.setItalic(True)
                 bg, fg = QColor(232, 232, 238, 235), QColor(125, 125, 138)
             else:
-                bfont = QFont(self.bubble_font)
                 bg, fg = QColor(255, 255, 255, 235), QColor(60, 60, 80)
             fm = QFontMetrics(bfont)
             max_w = min(240, self.width() - 16)
@@ -859,6 +879,11 @@ class PetWindow(QWidget):
                 else:
                     cur += ch
             lines.append(cur)
+            # 窗口窄（极小档）时行数会变多：超了就截断加省略号，别糊到鱼脸上
+            max_lines = max(2, int((self.bubble_h - 16) / max(1, fm.height())))
+            if len(lines) > max_lines:
+                lines = lines[:max_lines]
+                lines[-1] = lines[-1][:-1] + "…"
             bw = max(fm.horizontalAdvance(l) for l in lines) + 20
             bh = len(lines) * fm.height() + 14
             bx = (self.width() - bw) / 2
@@ -876,9 +901,14 @@ class PetWindow(QWidget):
 
         cx = self.width() / 2
         walking = self.target is not None and not self.dragging
+        running = walking and self.mode == "line" and self.run_mode
         if walking:
-            sway = math.sin(now * 9.0) * 3.5
-            bob = -abs(math.sin(now * 4.5)) * 7.0
+            if running:                       # 跑步：步子快、颠得高
+                sway = math.sin(now * 13.0) * 2.6
+                bob = -abs(math.sin(now * 7.0)) * 11.0
+            else:                             # 走路：慢悠悠晃
+                sway = math.sin(now * 9.0) * 3.5
+                bob = -abs(math.sin(now * 4.5)) * 7.0
         else:
             sway = math.sin(now * 2.5) * 1.5
             bob = 0.0
@@ -900,7 +930,7 @@ class PetWindow(QWidget):
             ph = pix.height() * scale * (1 + act_sy)
             pw = pix.width() * scale * (1 + act_sx)
             dx = cx - pw / 2
-            bottom = BUBBLE_H + MARGIN + self.cur_h
+            bottom = self.bubble_h + MARGIN + self.cur_h
             dy = bottom - ph + jump + bob
             p.save()
             p.setOpacity(opacity)
@@ -996,6 +1026,10 @@ class PetWindow(QWidget):
                 geo = (self.screen() or QApplication.primaryScreen()).availableGeometry()
                 self.target = (random.randint(geo.left() + 40, geo.right() - self.width() - 40),
                                random.randint(geo.top() + 40, geo.bottom() - self.height() - 40))
+        elif self.mode == "line":
+            if not self._line_target(now_ms):
+                self.update()
+                return
         else:
             self._maybe_idle_action()
             self.update()
@@ -1008,20 +1042,75 @@ class PetWindow(QWidget):
             if dist < 12:
                 self.target = None
                 self.rest_until = self.t * TICK + random.randint(8000, 18000)
+                if self.mode == "line":
+                    self.run_mode = False
                 self._set_dir("down")
             else:
                 step = self.cur_speed * TICK / 1000.0
                 nx, ny = cx + dx / dist * step, cy + dy / dist * step
                 self.move(int(nx - self.width() / 2), int(ny - self.height() / 2))
+                if self.mode == "line":
+                    # 横向行走：锁死高度，只改 x，免得走两步就漂到天花板
+                    if self.line_y is None:
+                        self.line_y = self.y()
+                    self.move(self.x(), int(self.line_y))
                 if abs(dx) > abs(dy) * 1.15:
                     self._set_dir("left" if dx < 0 else "right", 1 if dx < 0 else -1)
                 else:
                     self._set_dir("up" if dy < 0 else "down")
             if random.random() < 0.002 and self.jump_t == 0:
                 self.jump_t = 0.5
-        target_speed = SPEED if self.target is not None else 0.0
+        target_speed = self._speed_now()
         self.cur_speed += (target_speed - self.cur_speed) * 0.3
         self.update()
+
+    def _speed_now(self):
+        """目标速度：横向行走每段路随机「走」或「跑」"""
+        if self.target is None:
+            return 0.0
+        if self.mode == "line" and self.run_mode:
+            return SPEED * RUN_FACTOR
+        return SPEED
+
+    def _line_target(self, now_ms):
+        """横向行走：只在当前高度左右移动，走完歇一会儿"""
+        if self.target is not None:
+            return True
+        if now_ms < self.rest_until:
+            self._line_idle()
+            return False
+
+        geo = (self.screen() or QApplication.primaryScreen()).availableGeometry()
+        lo = geo.left() + 6
+        hi = geo.right() - self.width() - 6
+        if hi <= lo + 60:
+            self.rest_until = now_ms + 4000
+            return False
+
+        self.line_y = self.y()
+        cur = self.x()
+        side = 1 if random.random() < 0.5 else -1
+        tx = cur + side * random.randint(180, 760)
+        if tx < lo or tx > hi:                 # 撞边就往另一边去
+            tx = hi if tx < lo else lo
+        if abs(tx - cur) < 90:                 # 太近了没意思，走到另一头
+            tx = hi if cur < (lo + hi) / 2 else lo
+        self.target = (tx + self.width() / 2, self.y() + self.height() / 2)
+        self.run_mode = random.random() < 0.3  # 三成概率跑起来
+        self.cur_speed = 0.0
+        return True
+
+    def _line_idle(self):
+        """横向行走停下来时：站着 / 转身背对 / 蹦一下"""
+        if random.random() < 0.05:
+            pick = random.random()
+            if pick < 0.45:
+                self._set_dir("down", 1)                       # 正面站着
+            elif pick < 0.85:
+                self._set_dir("up", 1)                         # 背身
+            else:
+                self._set_dir("left" if self.facing < 0 else "right", self.facing)  # 侧身
+        self._maybe_idle_action()
 
     def _maybe_idle_action(self):
         if random.random() < 0.01:
@@ -1121,6 +1210,7 @@ class PetWindow(QWidget):
                 self.drag_start_pos = None
                 self._set_dir("down", 1)
                 self.target = None
+                self.line_y = self.y()          # 拖到哪就在哪条线上走
                 self.rest_until = self.t * TICK + random.randint(6000, 14000)
                 if random.random() < 0.5:
                     self.say(random.choice(DRAG_LINES))
@@ -1133,7 +1223,7 @@ class PetWindow(QWidget):
     def mouseDoubleClickEvent(self, e):
         if e.button() == Qt.MouseButton.LeftButton:
             self._click_timer.stop()
-            self.food_panel.popup_at(self.x() + self.width() / 2, self.y() + BUBBLE_H)
+            self.food_panel.popup_at(self.x() + self.width() / 2, self.y() + self.bubble_h)
 
     def _on_single_click(self):
         """单击：蹦跳回嘴 + 弹出办公便利贴（再点一次收起）"""
@@ -1256,7 +1346,7 @@ class PetWindow(QWidget):
     def _build_menu(self):
         m = QMenu(self)
         mode_menu = m.addMenu("模式")
-        for label, key in [("自由散步", "wander"), ("跟随鼠标", "follow"), ("原地待着", "still")]:
+        for label, key in MODES:
             a = mode_menu.addAction(label)
             a.setCheckable(True)
             a.setChecked(self.mode == key)
@@ -1365,19 +1455,56 @@ class PetWindow(QWidget):
 
     # ---------- 功能 ----------
     def set_mode(self, mode):
+        if mode not in MODE_KEYS:
+            return
         self.mode = mode
         self.target = None
+        self.cur_speed = 0.0
+        self.line_y = self.y()
         self.cfg["mode"] = mode
+        self.save_cfg()
+        label = dict((k, l) for l, k in MODES).get(mode, mode)
+        self.say({"line": "我沿着地面左右溜达～",
+                  "wander": "随便逛逛去",
+                  "follow": "跟你走啦",
+                  "still": "那我在这儿待着"}.get(mode, label))
+
+    def _apply_size_metrics(self):
+        """按当前身高重算窗口；「极小」档额外加高、加宽，别让气泡挤成一条"""
+        try:
+            mult = float(self.cfg.get("size", 0.7))
+        except (TypeError, ValueError):
+            mult = 0.7
+        self.cur_h = max(60, int(340 * mult))
+        heights = sorted({k[1] for k in self.sprites})
+        if heights and self.cur_h not in heights:      # 配置里的旧值/怪值兜底
+            self.cur_h = min(heights, key=lambda x: abs(x - self.cur_h))
+        tiny = self.cur_h < 120
+        self.win_mx = int(self.cur_h * 0.062) + 6
+        self.bubble_h = BUBBLE_H if not tiny else 88     # 气泡可用高度
+        self.bubble_pt = 11 if not tiny else 10          # 气泡字号
+        widths = [p.width() for k, p in self.sprites.items() if k[1] == self.cur_h]
+        self.win_w = (max(widths) if widths else self.cur_h) + self.win_mx * 2
+        if tiny:
+            self.win_w = max(self.win_w, 168)            # 至少能放下一行 10 个字
+        self.setFixedSize(self.win_w, self.cur_h + self.bubble_h + MARGIN * 2 + 10)
 
     def set_size(self, mult):
-        self.cur_h = int(340 * mult)
+        old_h = self.height()
         self.cfg["size"] = mult
         self.cross_t = 0.0
         self.prev_key = None
-        self.win_mx = int(self.cur_h * 0.062) + 6
-        self.win_w = max(p.width() for k, p in self.sprites.items() if k[1] == self.cur_h) + self.win_mx * 2
-        self.setFixedSize(self.win_w, self.cur_h + BUBBLE_H + MARGIN * 2 + 10)
+        self._apply_size_metrics()
+        dy = self.height() - old_h
+        if dy:
+            self.move(self.x(), self.y() - dy)      # 脚底不动，往上长
+        if self.mode == "line":
+            self.line_y = self.y()
         self.snap_into_screen()
+        self.save_cfg()
+        self.update()
+        label = next((l for l, m in SIZE_LEVELS.items() if abs(m - mult) < 1e-6), "")
+        self.say(f"变成{label}号了" if label else "换了个大小")
 
     def snap_into_screen(self):
         geo = (self.screen() or QApplication.primaryScreen()).availableGeometry()
