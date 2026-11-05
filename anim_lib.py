@@ -411,9 +411,20 @@ class AnimLibraryDialog(QDialog):
             self.play(item)
 
     # -- 播放
+    def _select_in_list(self, anim_id: str):
+        """让列表高亮跟上正在播的那一条（外部直接调 play 时也要同步）"""
+        for i in range(self.list.count()):
+            if self.list.item(i).data(Qt.ItemDataRole.UserRole) == anim_id:
+                if self.list.currentRow() != i:
+                    self.list.blockSignals(True)
+                    self.list.setCurrentRow(i)
+                    self.list.blockSignals(False)
+                return
+
     def play(self, item: dict):
         self._stop_playback()
         self._current = item
+        self._select_in_list(item["id"])
         self.name_lab.setText(item["name"])
         bits = [f"`{item['id']}`", item.get("category", "")]
         if item.get("duration"):

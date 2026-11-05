@@ -122,6 +122,9 @@ Run it, right-click the pet → **⚙ API Settings** → pick a provider → pas
   ##### 动画库（114 段透明动画）
   - 右键 → **🎬 动画库**，左边搜索 / 分类筛选，右边直接播，棋盘格底看得出透明
   - 素材是 **640×360 的 VP9-alpha WebM**（24fps，约 10 秒，可首尾循环）+ 220×124 的 GIF 预览
+
+  <img src="docs/anim-library.png" width="720" alt="动画库面板">
+
   - 十二类：待机 / 移动 / 点击回应 / 玩耍 / 工作 / 吃 / 睡觉 / 余额 / 碎碎念 / 节日 / 特效 / 日常
   - 细节与全部动画见 **[dsh-pet/README.md](dsh-pet/README.md)** 与 **[dsh-pet/GALLERY.md](dsh-pet/GALLERY.md)**
   - 播放依赖 PyAV（`pip install av numpy`），没装时自动退回 GIF 预览；**不能用 QtMultimedia**，
