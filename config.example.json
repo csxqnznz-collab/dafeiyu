@@ -1,0 +1,29 @@
+{
+    "_readme": "示例配置。复制成 config.json 后自行填写；config.json 已被 .gitignore 忽略，不会进仓库。",
+    "mode": "still",
+    "size": 0.55,
+    "topmost": true,
+    "passthrough": false,
+    "autostart": false,
+    "x": null,
+    "y": null,
+    "ai_provider": "agnes",
+    "ai_profiles": {
+        "deepseek": {
+            "key": "",
+            "base": "https://api.deepseek.com/v1",
+            "model": "deepseek-chat"
+        },
+        "agnes": {
+            "key": "",
+            "base": "https://apihub.agnes-ai.com/v1",
+            "model": "agnes-2.5-flash"
+        },
+        "custom": {
+            "key": "",
+            "base": "",
+            "model": ""
+        }
+    },
+    "city": "广州"
+}

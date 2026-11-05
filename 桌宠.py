@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-大肥鱼桌宠 —— 三视图透明桌宠 + DeepSeek AI 对话
+大肥鱼桌宠 —— 三视图透明桌宠 + Agnes AI 对话
 左键单击：弹出功能列表（🗨️图标）→ 点击🗨️弹出聊天框
 聊天时只禁用移动，呼吸/摇摆/小动作正常
 """
@@ -10,9 +10,11 @@ import json
 import math
 import os
 import random
+import re
 import subprocess
 import sys
 import threading
+import time
 
 def load_config():
     try:
@@ -39,12 +41,54 @@ from PySide6.QtWidgets import (QApplication, QWidget, QMenu, QSystemTrayIcon,
                                QMessageBox, QInputDialog, QLineEdit, QVBoxLayout,
                                QHBoxLayout, QPushButton, QFrame, QDialog, QToolButton)
 
+from work_panel import (WorkStore, WorkPanel, WorkSettingsDialog, ReminderEngine,
+                        item_label)
+import ai_settings
+from ai_settings import AISettingsDialog
+
+# 长期记忆引擎（独立模块，出错不影响桌宠主流程）
+try:
+    from memory import MemoryEngine
+    from memory.dashboard import MemoryDashboard
+    MEMORY_AVAILABLE = True
+except Exception as _mem_err:  # pragma: no cover
+    MEMORY_AVAILABLE = False
+    MEMORY_IMPORT_ERROR = str(_mem_err)
 
 
-# ===== DeepSeek 配置 =====
-DS_BASE_URL = "https://api.deepseek.com/v1"
-DS_MODEL = "deepseek-chat"
-DS_SYSTEM = "你是桌面宠物大肥鱼，贱兮兮但可爱，每句话不超过25字，偶尔吐槽主人但别真骂人。"
+
+# ===== AI 对话配置 =====
+# 服务商预设（DeepSeek / Agnes AI / 自定义）在 ai_settings.py，
+# 实际生效的 base/key/model 存在 config.json 的 ai_profiles 里，可在右键菜单改。
+AI_PROVIDER = "Agnes AI"      # 仅作旧代码兜底显示
+AI_BASE_URL = "https://apihub.agnes-ai.com/v1"
+AI_MODEL = "agnes-2.5-flash"
+AI_MODELS = ["agnes-2.5-flash", "agnes-3.0-flash", "agnes-2.5-pro-alpha"]
+AI_SYSTEM = ("你是桌面宠物大肥鱼，贱兮兮但可爱，每句话不超过25字，偶尔吐槽主人但别真骂人。"
+             "只输出这一句台词本身，不要分析、不要解释、不要加引号或括号说明。")
+
+# 正文被思维链吃光时的兜底台词
+NOTHING_LINES = ["哼，脑子卡壳了…再说一遍", "本鱼刚在走神，你刚说啥", "唔，没听清，再说一次嘛"]
+
+# 出现这些词说明拿到的是思维链，不是台词
+REASONING_MARKS = ("char count", "characters", "let's", "user said", "possible responses",
+                   "tone:", "option 1", "option:", "chars.", "字数", "候选", "我们可以", "分析：")
+# 只要出现一个就判定为思维链
+REASONING_STRONG = ("char count", "possible responses", "user said", "用户说", "用户问",
+                    "每句话不超过", "候选：", "字数：", "人设", "台词：")
+
+
+def _looks_like_reasoning(t):
+    low = (t or "").lower()
+    if any(k in low for k in REASONING_STRONG):
+        return True
+    hits = sum(1 for k in REASONING_MARKS if k in low)
+    return hits >= 2 or len(low) > 180
+
+# 兼容旧变量名
+DS_BASE_URL = AI_BASE_URL
+DS_MODEL = AI_MODEL
+DS_SYSTEM = AI_SYSTEM
 
 if getattr(sys, "frozen", False):
     APP_DIR = os.path.dirname(sys.executable)
@@ -56,6 +100,7 @@ else:
     PYTHONW = os.path.join(APP_DIR, ".venv", "Scripts", "pythonw.exe")
 SPRITE_DIR = os.path.join(BUNDLE_DIR, "sprites")
 CONFIG_PATH = os.path.join(APP_DIR, "config.json")
+AI_ERROR_LOG = os.path.join(APP_DIR, "ai_error.log")
 
 BUBBLE_H = 56
 MARGIN = 4
@@ -359,9 +404,18 @@ class PetWindow(QWidget):
             "autostart": False,
             "x": None,
             "y": None,
-            "ds_api_key": "",
+            "ai_provider": "agnes",
+            "ai_profiles": {},
             "city": "汕头"
     })
+
+        # 配置迁移：旧版单 Key → ai_profiles（一次即可，迁移后立刻落盘）
+        try:
+            if ai_settings.ensure(self.cfg):
+                with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+                    json.dump(self.cfg, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print("[config] 迁移失败:", e)
         
         flags = Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool
         if self.cfg.get("topmost", True):
@@ -432,7 +486,31 @@ class PetWindow(QWidget):
         
         # 聊天对话框
         self.chat_dialog = ChatDialog(self)
-        
+
+        # 办公便利贴 + 工作提醒
+        self.ai_reply_sink = None      # 便利贴打开时，AI 回复直接进聊天区
+        self._reply_queue = []
+        self.work_store = WorkStore(os.path.join(APP_DIR, "work_items.json"))
+        self.work_panel = WorkPanel(self.work_store, self)
+        self.reminder_engine = ReminderEngine(self.work_store, self.say, self.work_panel.refresh,
+                                              self._on_day_review)
+        self.reminder_timer = QTimer(self)
+        self.reminder_timer.timeout.connect(self.reminder_engine.check)
+        self.reminder_timer.start(15000)
+        QTimer.singleShot(4000, self.reminder_engine.startup_brief)
+
+        # 长期记忆引擎（跨会话记忆 / 画像 / 回忆检索）
+        self.memory = None
+        self.memory_dashboard = None
+        if MEMORY_AVAILABLE:
+            try:
+                self.memory = MemoryEngine(APP_DIR, api_provider=self._ai_api,
+                                           logger=self._mem_log)
+                QTimer.singleShot(3000, self._memory_startup)
+            except Exception as e:
+                print(f"[memory] 初始化失败：{e}")
+                self.memory = None
+
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.tick)
         self.timer.start(TICK)
@@ -457,61 +535,252 @@ class PetWindow(QWidget):
             self._apply_passthrough(True)
 
     # ---------- AI 方法 ----------
+    def _api_key(self):
+        return ai_settings.api_key(self.cfg)
+
+    def _ai_api(self):
+        """给记忆引擎用的接口配置（复用当前服务商的 key / base / model）"""
+        return {"key": self._api_key(), "base": self._ai_base_url(),
+                "model": self._ai_model()}
+
+    def _mem_log(self, msg):
+        print(f"[memory] {msg}")
+
+    def _memory_startup(self):
+        if not self.memory:
+            return
+        try:
+            self.memory.startup()
+        except Exception as e:
+            self._mem_log(f"启动检查失败：{e}")
+
+    # ---------- 记忆中心 ----------
+    def open_memory_dashboard(self):
+        if not self.memory:
+            hint = "记忆引擎没起来" if MEMORY_AVAILABLE else f"记忆模块导入失败：{MEMORY_IMPORT_ERROR}"
+            self.say("记忆模块没起来…")
+            QMessageBox.warning(self, "记忆中心", hint + "\n看下 ai_error.log 或控制台输出")
+            return
+        try:
+            if self.memory_dashboard is None:
+                self.memory_dashboard = MemoryDashboard(self.memory, None)
+            self.memory_dashboard.refresh()
+            self.memory_dashboard.show()
+            self.memory_dashboard.raise_()
+            self.memory_dashboard.activateWindow()
+        except Exception as e:
+            QMessageBox.warning(self, "记忆中心", f"打不开：{e}")
+
+    def _remember_dialog(self):
+        if not self.memory:
+            self.say("记忆模块没起来…")
+            return
+        text, ok = QInputDialog.getMultiLineText(
+            self, "让大肥鱼记住",
+            "要它长期记住什么？\n（存为核心记忆，以后每次聊天都会带上）", "")
+        if not (ok and text.strip()):
+            return
+        mid, _ = self.memory.manual_remember(text.strip(), "CORE", 9)
+        self.jump_t = 1.0
+        self.say("记住啦！忘不了" if mid else "这句没存下来")
+        if self.memory_dashboard:
+            try:
+                self.memory_dashboard.refresh()
+            except Exception:
+                pass
+
+    def _dream_now(self):
+        if not self.memory:
+            self.say("记忆模块没起来…")
+            return
+        self.say("我去整理一下记忆…")
+
+        def worker():
+            try:
+                rep = self.memory.dreaming.run(do_extract=True)
+                self._queue_say(f"整理好啦：合并{rep['merged']} 归档{rep['archived']}")
+            except Exception as e:
+                self._mem_log(f"整理失败：{e}")
+                self._queue_say("整理失败了，看下日志")
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _toggle_memory(self, on):
+        if not self.memory:
+            return
+        self.memory.set_enabled(bool(on))
+        self.say("记忆开了，我记得住你" if on else "记忆关了，我啥也不记")
+
+    def _ai_model(self):
+        return ai_settings.model(self.cfg)
+
+    def _ai_base_url(self):
+        return ai_settings.base_url(self.cfg)
+
+    @staticmethod
+    def _clean_reply(text):
+        """把模型返回的 content 洗成一句台词；判定为思维链/垃圾时返回空串"""
+        t = (text or "").strip()
+        t = t.strip('"“”\'‘’「」『』《》 \t\r\n')
+        t = " ".join(t.split())
+        if not t or _looks_like_reasoning(t):
+            return ""
+        if len(t) > 60:
+            # 只留第一句，避免整段分析贴脸
+            head = re.split(r"(?<=[。！？!?~～])", t)[0].strip()
+            t = head if 2 <= len(head) <= 60 else t[:58] + "…"
+        return t
+
     def _call_ds(self, user_msg):
         if self.ds_busy:
             self.say("等等，上一句还没回完呢")
             return
-        
-        key = self.cfg.get("ds_api_key", "")
+
+        key = self._api_key()
+        pname = ai_settings.title(self.cfg)
         if not key:
-            self.say("请先在右键菜单里设置 DeepSeek Key！")
+            self.say(f"先在右键「接口设置」里填上 {pname} 的 Key")
             return
-        
+        if not self._ai_model():
+            self.say("模型名还没填，右键「接口设置」补一下")
+            return
+
         self.ds_busy = True
-        
-        # 构建消息列表
-        messages = [{"role": "system", "content": DS_SYSTEM}]
-        messages.extend(self.chat_history[-self.max_history:])
-        messages.append({"role": "user", "content": user_msg})
-        
+
+        # 构建消息列表：有记忆引擎时由 Context Builder 组装
+        # （人格 + 核心记忆 + 用户画像 + 相关旧事 + 最近对话），按 Token 预算裁剪
+        messages = None
+        if self.memory:
+            try:
+                ctx = self.memory.build_context(
+                    user_msg,
+                    fallback_history=self.chat_history[-self.max_history:],
+                    personality=AI_SYSTEM)
+                messages = ctx["messages"]
+            except Exception as e:
+                print(f"[memory] 上下文构建失败，退回纯聊天：{e}")
+                messages = None
+        if not messages:
+            messages = [{"role": "system", "content": AI_SYSTEM}]
+            messages.extend(self.chat_history[-self.max_history:])
+            messages.append({"role": "user", "content": user_msg})
+
+        model = self._ai_model()
+        url = f"{self._ai_base_url()}/chat/completions"
+
         def worker():
-            url = "https://api.deepseek.com/v1/chat/completions"
             headers = {
                 "Authorization": f"Bearer {key}",
                 "Content-Type": "application/json"
             }
-            payload = {
-                "model": "deepseek-chat",
-                "messages": messages,
-                "max_tokens": 100,
-                "temperature": 0.9
-            }
+
+            def post(mdl, max_tokens=1024, timeout=45):
+                return requests.post(url, json={
+                    "model": mdl,
+                    "messages": messages,
+                    # 推理类模型会先消耗 reasoning tokens，上限给小了会拿不到正文
+                    "max_tokens": max_tokens,
+                }, headers=headers, timeout=timeout)
+
+            def log_fail(mdl, resp):
+                try:
+                    with open(AI_ERROR_LOG, "a", encoding="utf-8") as f:
+                        f.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] model={mdl} "
+                                f"status={resp.status_code} body={resp.text[:800]}\n")
+                except Exception:
+                    pass
+
             try:
-                resp = requests.post(url, json=payload, headers=headers, timeout=10)
+                used = model
+                fallback = ai_settings.default_model(self.cfg) or model
+                resp = post(used)
+                # 模型在 /models 列表里但上游没开（返回 404 openai_error）→ 自动降级
+                if resp.status_code >= 400 and used != fallback and (
+                        resp.status_code == 404 or "model" in (resp.text or "").lower()):
+                    log_fail(used, resp)
+                    print(f"[{pname}] {used} 不可用({resp.status_code})，降级到 {fallback}")
+                    used = fallback
+                    resp = post(used)
+
                 if resp.status_code == 200:
-                    reply = resp.json()["choices"][0]["message"]["content"].strip()
-                    if len(reply) > 30:
-                        reply = reply[:28] + "…"
-                    # 存入历史
+                    data = resp.json()
+                    ch = (data.get("choices") or [{}])[0]
+                    msg = ch.get("message") or {}
+                    reply = self._clean_reply(msg.get("content"))
+                    if not reply:
+                        # 思维链把预算吃光 → 正文为空；加大预算重试一次
+                        try:
+                            usage = data.get("usage") or {}
+                            rt = (usage.get("completion_tokens_details") or {}).get("reasoning_tokens")
+                        except Exception:
+                            rt = None
+                        print(f"[{pname}] 正文为空（finish={ch.get('finish_reason')}, "
+                              f"reasoning_tokens={rt}），加大预算重试")
+                        resp2 = post(used, max_tokens=4000, timeout=60)
+                        if resp2.status_code == 200:
+                            msg2 = (resp2.json().get("choices") or [{}])[0].get("message") or {}
+                            reply = self._clean_reply(msg2.get("content"))
+                        else:
+                            log_fail(used, resp2)
+                    if not reply:
+                        self._reply_out(random.choice(NOTHING_LINES))
+                        return
+                    full = reply
+                    short = full if len(full) <= 30 else full[:28] + "…"
+                    if used != model:
+                        # 降级后把配置改回可用模型，下次不再白跑一次
+                        ai_settings.save_profile(self.cfg, ai_settings.active_id(self.cfg),
+                                                 key, self._ai_base_url(), used)
+                        self.save_cfg()
+                    # 存入历史（存完整回复，气泡只显示短的）
                     self.chat_history.append({"role": "user", "content": user_msg})
-                    self.chat_history.append({"role": "assistant", "content": reply})
+                    self.chat_history.append({"role": "assistant", "content": full})
                     if len(self.chat_history) > self.max_history:
                         self.chat_history = self.chat_history[-self.max_history:]
-                    self._queue_say(reply)
+                    # 落库 + 按需触发后台记忆提取（失败不影响聊天）
+                    if self.memory:
+                        try:
+                            self.memory.record_exchange(user_msg, full)
+                        except Exception as e:
+                            print(f"[memory] 记录会话失败：{e}")
+                    self._reply_out(short, full)
                 else:
-                    error_msg = resp.json().get("error", {}).get("message", str(resp.status_code))
-                    self._queue_say(f"API错误: {error_msg[:12]}")
-                    print(f"[DeepSeek] 状态码: {resp.status_code}, 返回: {resp.text}")
+                    log_fail(used, resp)
+                    self._reply_out(self._friendly_error(resp))
             except requests.exceptions.Timeout:
-                self._queue_say("请求超时，检查网络")
+                self._reply_out("请求超时，检查网络")
             except requests.exceptions.ConnectionError:
-                self._queue_say("连接失败，检查网络")
+                self._reply_out("连接失败，检查网络")
             except Exception as e:
-                self._queue_say(f"请求失败: {str(e)[:12]}")
+                self._reply_out(f"请求失败: {str(e)[:12]}")
             finally:
                 self.ds_busy = False
-        
+
         threading.Thread(target=worker, daemon=True).start()
+
+    def _reply_out(self, bubble_text, full_text=None):
+        """AI 回复出口：便利贴开着就进聊天区，否则冒气泡"""
+        if self.ai_reply_sink:
+            self._reply_queue.append(full_text or bubble_text)
+        else:
+            self._queue_say(bubble_text)
+
+    def _friendly_error(self, resp):
+        """把网关的英文错误码翻译成能看懂的气泡"""
+        code = resp.status_code
+        body = (resp.text or "").lower()
+        pname = ai_settings.title(self.cfg)
+        if code == 401 or code == 403:
+            return "Key 不对，右键「接口设置」重填"
+        if code == 402:
+            return "余额不足了…"
+        if code == 404 or "model" in body:
+            return "这个模型没开，右键换个模型"
+        if code == 429:
+            return "说太快了，歇一会儿"
+        if code >= 500:
+            return f"{pname} 服务抽风了，等下再试"
+        return f"接口出错 {code}，详情见 ai_error.log"
 
     # ---------- 绘制 ----------
     def paintEvent(self, _):
@@ -623,6 +892,18 @@ class PetWindow(QWidget):
             for text in self._say_queue:
                 self.say(text)
             self._say_queue.clear()
+
+        # 便利贴聊天区的 AI 回复（同样需要主线程更新）
+        if self._reply_queue:
+            sink = self.ai_reply_sink
+            texts = self._reply_queue[:]
+            self._reply_queue.clear()
+            if sink:
+                for text in texts:
+                    try:
+                        sink(text)
+                    except Exception as e:
+                        print("[chat] 追加失败:", e)
 
         self.check_system_status()
         
@@ -773,6 +1054,8 @@ class PetWindow(QWidget):
             if not self.dragging and delta.manhattanLength() > 6:
                 self.dragging = True
                 self.drag_offset = e.globalPosition().toPoint() - QPoint(self.x(), self.y())
+                if self.work_panel.isVisible():
+                    self.work_panel.hide()
             if self.dragging and self.drag_offset is not None:
                 pos = e.globalPosition().toPoint() - self.drag_offset
                 self.move(pos)
@@ -803,14 +1086,30 @@ class PetWindow(QWidget):
             self.food_panel.popup_at(self.x() + self.width() / 2, self.y() + BUBBLE_H)
 
     def _on_single_click(self):
-        """单击：蹦跳回嘴 + 弹聊天面板（两不误，不想聊点鱼身外关闭）"""
+        """单击：蹦跳回嘴 + 弹出办公便利贴（再点一次收起）"""
         if random.random() < 0.7:
             self.jump_t = 1.0
         if random.random() < 0.6:
             self.say(random.choice(REACT_LINES))
-        panel = self.function_panel
-        panel.popup_at(self.x() + self.width() / 2 - panel.width() / 2,
-                       self.y() - panel.height() - 10)
+        self.toggle_work_panel()
+
+    def toggle_work_panel(self):
+        if self.work_panel.isVisible():
+            self.work_panel.hide_anim()
+        else:
+            self.open_work_panel()
+
+    def open_work_panel(self):
+        """在桌宠上方弹出便利贴（空间不够就弹在下方）"""
+        screen = self.screen() or QApplication.primaryScreen()
+        g = screen.availableGeometry()
+        w, h = self.work_panel.W, self.work_panel.H
+        x = self.x() + self.width() / 2 - w / 2
+        x = max(g.left() + 8, min(g.right() - w - 8, x))
+        y = self.y() - h - 12
+        if y < g.top() + 8:
+            y = min(g.bottom() - h - 8, self.y() + self.height() + 12)
+        self.work_panel.popup_at(int(x), int(y))
 
     def on_food(self, food):
         self.food_panel.hide()
@@ -820,15 +1119,33 @@ class PetWindow(QWidget):
         self.say(random.choice(lines))
 
     def _show_chat_dialog(self):
-        key = self.cfg.get("ds_api_key", "")
-        if not key:
-            self.say("请先在右键菜单里设置 DeepSeek Key！")
-            self.chat_paused = False
-            return
-        self.chat_dialog.popup_at(
-            self.x() + self.width() / 2,
-            self.y() + BUBBLE_H
-        )
+        """🗨️ 图标：打开便利贴并定位到输入框"""
+        self.open_work_panel()
+        self.work_panel.input.setFocus()
+
+    def _open_work_settings(self):
+        dlg = WorkSettingsDialog(self.work_store, self.work_panel)
+        dlg.exec()
+        self.work_panel.refresh()
+
+    def _on_day_review(self, items):
+        """下班回顾：便利贴里列出今天全部工作，托盘再推一条"""
+        try:
+            self.work_panel.append_review(items)
+            if not self.work_panel.isVisible():
+                self.open_work_panel()
+        except Exception as e:
+            print("[review] 便利贴展开展示失败:", e)
+        try:
+            done = sum(1 for i in items if i.get("done"))
+            head = f"今日工作回顾 · {done}/{len(items)} 完成"
+            body = "\n".join(("✓ " if i.get("done") else "○ ") +
+                             f"{item_label(i)} {i['content']}" for i in items[:8])
+            if len(items) > 8:
+                body += f"\n…还有 {len(items) - 8} 条"
+            self.tray.showMessage(head, body, self.icon, 8000)
+        except Exception as e:
+            print("[review] 托盘提示失败:", e)
 
     """def _get_city_by_ip(self):
         try:
@@ -900,8 +1217,30 @@ class PetWindow(QWidget):
             a.setCheckable(True)
             a.setChecked(abs(self.cur_h - 340 * mult) < 2)
             a.triggered.connect(lambda _, v=mult: self.set_size(v))
-        m.addAction("设置 Key", self._set_key_dialog)
+        model_menu = m.addMenu(f"AI 模型（{ai_settings.title(self.cfg)}）")
+        cur_model = self._ai_model()
+        for mdl in ai_settings.models(self.cfg):
+            a = model_menu.addAction(mdl)
+            a.setCheckable(True)
+            a.setChecked(cur_model == mdl)
+            a.triggered.connect(lambda _, k=mdl: self._set_model(k))
+        model_menu.addSeparator()
+        model_menu.addAction("接口设置…", self._open_ai_settings)
+        m.addAction("⚙ 接口设置（DeepSeek / Agnes / 自定义）", self._open_ai_settings)
         m.addAction("查看天气", self._get_weather)
+        m.addSeparator()
+        m.addAction("📌 今日工作 / 便利贴", self.open_work_panel)
+        m.addAction("⏰ 工作提醒设置", self._open_work_settings)
+        m.addSeparator()
+        mem_menu = m.addMenu("🧠 长期记忆")
+        mem_menu.addAction("记忆中心…", self.open_memory_dashboard)
+        mem_menu.addAction("让大肥鱼记住…", self._remember_dialog)
+        mem_menu.addAction("立即整理记忆", self._dream_now)
+        mma = mem_menu.addAction("长期记忆开关")
+        mma.setCheckable(True)
+        mma.setChecked(self.memory.enabled() if self.memory else False)
+        mma.setEnabled(self.memory is not None)
+        mma.triggered.connect(self._toggle_memory)
         m.addSeparator()
         m.addAction("显示/隐藏", self.toggle_visible)
         m.addAction("回到屏幕内", self.snap_into_screen)
@@ -921,19 +1260,28 @@ class PetWindow(QWidget):
         m.addAction("退出", self.quit_app)
         return m
 
-    def _set_key_dialog(self):
-        key, ok = QInputDialog.getText(
-            self, 
-            "设置 DeepSeek Key", 
-            "输入你的 API Key（从 platform.deepseek.com 获取）:",
-            QLineEdit.EchoMode.Normal,
-            self.cfg.get("ds_api_key", "")
-        )
-        if ok and key.strip():
-            self.cfg["ds_api_key"] = key.strip()
-            self.say("Key 设置成功！")
-        elif ok and not key.strip():
-            self.say("Key 不能为空")
+    def _open_ai_settings(self):
+        """接口设置面板：DeepSeek / Agnes / 自定义 OpenAI 兼容"""
+        def saved():
+            self.save_cfg()
+            prof = ai_settings.profile(self.cfg)
+            self.say(f"换成 {ai_settings.title(self.cfg)} 了" if prof["key"]
+                     else "配置存好了，Key 还没填")
+
+        try:
+            dlg = AISettingsDialog(self.cfg, on_saved=saved, parent=None)
+            dlg.move(self.x() + self.width() // 2 - 260,
+                     max(0, self.y() + self.height() // 2 - 224))
+            dlg.exec()
+        except Exception as e:
+            QMessageBox.warning(self, "接口设置", f"面板打不开：{e}")
+
+    def _set_model(self, model):
+        p = ai_settings.profile(self.cfg)
+        ai_settings.save_profile(self.cfg, ai_settings.active_id(self.cfg),
+                                 p["key"], p["base"], model)
+        self.save_cfg()
+        self.say(f"换成 {model} 了")
 
     def _on_tray_activated(self, reason):
         if reason == QSystemTrayIcon.ActivationReason.Context:
@@ -1016,10 +1364,24 @@ class PetWindow(QWidget):
             self.show()
             self.raise_()
 
+    def save_cfg(self):
+        try:
+            with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+                json.dump(self.cfg, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print("[config] 保存失败:", e)
+
     def quit_app(self):
         self.cfg["x"], self.cfg["y"] = self.x(), self.y()
-        with open(CONFIG_PATH, "w", encoding="utf-8") as f:
-            json.dump(self.cfg, f, ensure_ascii=False, indent=2)
+        self.save_cfg()
+        # 退出前把今天聊的整理进长期记忆（限时，超时留给下次启动继续）
+        if self.memory:
+            try:
+                self.say("记一下今天的事…")
+                QApplication.processEvents()
+                self.memory.shutdown()
+            except Exception as e:
+                self._mem_log(f"退出整理失败：{e}")
         self.tray.hide()
         QApplication.quit()
 
