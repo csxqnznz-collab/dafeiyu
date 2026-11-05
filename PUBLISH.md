@@ -21,11 +21,26 @@ git status --short                          # 确认没有 config.json / *.db / 
 
 ---
 
+## 0. 当前状态（2026-11-05 已发布）
+
+- 远端：`https://github.com/csxqnznz-collab/dafeiyu`（origin 已指向该仓库，main 已推送）
+- 本地凭据：PAT 已写入 Windows 凭据管理器，之后 `git push` 不再需要输密码
+- `.git/config` 里**没有**保存明文 token（推送时用 `url.insteadOf` 临时注入，未落盘）
+- 已推送 5 个自有提交，作者统一为 `csxqnznz-collab`；上游历史（1190fasheqi 等）保持原作者署名
+
+日常改代码后只需要：
+
+```bash
+git add -A && git commit -m "xxx" && git push
+```
+
+---
+
 ## 1. 确认远端仓库
 
 ```bash
 git remote -v
-# origin  https://github.com/<你的用户名>/dafeiyu-pet.git
+# origin  https://github.com/csxqnznz-collab/dafeiyu.git
 ```
 
 ### 情况 A：这个仓库就是你自己的
