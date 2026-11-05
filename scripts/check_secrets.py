@@ -20,7 +20,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 SKIP_DIRS = {".git", ".venv", "venv", "__pycache__", "build", "dist", ".idea", ".vscode"}
 SKIP_EXT = {".png", ".jpg", ".jpeg", ".gif", ".ico", ".webp", ".zip", ".exe", ".pyc",
-            ".db", ".db-wal", ".db-shm", ".mp4", ".ttf", ".otf"}
+            ".db", ".db-wal", ".db-shm", ".mp4", ".webm", ".mov", ".mkv",
+            ".mp3", ".wav", ".ogg", ".ttf", ".otf"}
 
 # 明确不该出现的硬编码密钥
 PATTERNS = [

@@ -47,6 +47,13 @@ import ai_settings
 from ai_settings import AISettingsDialog
 from chatter import ChatterBox, LEVELS as CHATTER_LEVELS
 
+# 动画库（dsh-pet 素材，114 段 VP9-alpha 透明视频）
+try:
+    import anim_lib
+except Exception as _anim_err:  # pragma: no cover
+    anim_lib = None
+    print(f"[桌宠] 动画库不可用：{_anim_err}")
+
 # 长期记忆引擎（独立模块，出错不影响桌宠主流程）
 try:
     from memory import MemoryEngine
@@ -1403,6 +1410,13 @@ class PetWindow(QWidget):
         mma.setEnabled(self.memory is not None)
         mma.triggered.connect(self._toggle_memory)
         m.addSeparator()
+        # 动画库（114 段 640×360 VP9-alpha 透明动画）
+        try:
+            _n = len(anim_lib.animations())
+        except Exception:
+            _n = 0
+        m.addAction(f"🎬 动画库（{_n} 段）" if _n else "🎬 动画库", self._open_anim_library)
+        m.addSeparator()
         m.addAction("显示/隐藏", self.toggle_visible)
         m.addAction("回到屏幕内", self.snap_into_screen)
         pa = m.addAction("鼠标穿透（点不到它）")
@@ -1436,6 +1450,16 @@ class PetWindow(QWidget):
             dlg.exec()
         except Exception as e:
             QMessageBox.warning(self, "接口设置", f"面板打不开：{e}")
+
+    def _open_anim_library(self):
+        """动画库：浏览 / 播放 dsh-pet/assets 下的透明动画"""
+        try:
+            dlg = anim_lib.AnimLibraryDialog(parent=None)
+            dlg.move(max(0, self.x() + self.width() // 2 - 430),
+                     max(0, self.y() + self.height() // 2 - 280))
+            dlg.exec()
+        except Exception as e:
+            QMessageBox.warning(self, "动画库", f"面板打不开：{e}")
 
     def _set_model(self, model):
         p = ai_settings.profile(self.cfg)

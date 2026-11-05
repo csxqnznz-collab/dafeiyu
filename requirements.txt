@@ -2,3 +2,8 @@ PySide6>=6.5
 requests
 psutil
 pynvml
+
+# 动画库（dsh-pet/assets 的 VP9-alpha 视频）需要 PyAV + numpy：
+#   pip install av numpy
+# 可选依赖——不装也能跑桌宠，动画库会自动退回用 GIF 预览播放。
+# 别用 QtMultimedia：它解 VP9-alpha 会丢掉透明通道，画面变黑底。

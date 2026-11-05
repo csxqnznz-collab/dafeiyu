@@ -19,6 +19,7 @@ A transparent anime-style desktop pet for Windows. She wanders around your deskt
 | 办公便利贴 | 头顶便利贴记今日工作，一句话拆多条，到点提醒，下班回顾                 | Sticky-note panel for today's tasks, Chinese time parsing, reminders, end-of-day review          |
 | 长期记忆  | 本地 SQLite 五层记忆 + 可塑性记忆：自动提炼、按需回忆、合并重塑与遗忘     | Five-layer local memory in SQLite with Plastic Memory: auto-extract, recall, merge, reshape, fade |
 | 话唠模式  | 三档频率，按聊天与记忆主动开口，八种情绪，深夜免打扰                  | Three chatter levels, memory-driven small talk, eight moods, quiet hours                         |
+| 动画库   | 114 段 640×360 透明动画（待机/吃喝/玩耍/工作/节日/睡觉/点击回应…），面板内搜索播放 | 114 transparent 640×360 clips across 12 categories, browsable and playable with real alpha        |
 | 数据隔离  | Key / 工作项 / 记忆库全部不入仓库，附密钥扫描脚本               | No keys or personal data in the repo; bundled secret scanner                                     |
 
 ## 快速开始 · Quick Start
@@ -118,6 +119,15 @@ Run it, right-click the pet → **⚙ API Settings** → pick a provider → pas
   - 地址容错：不写 `https://` 自动补；误粘 `/v1/chat/completions` 自动截回 `/v1`
   - 模型 404 自动降级到该服务商的默认模型，并把配置改回可用值（下次不再白跑）
   - 配置存在 `config.json` 的 `ai_profiles` 下，旧版单 Key 配置启动时自动迁移
+  ##### 动画库（114 段透明动画）
+  - 右键 → **🎬 动画库**，左边搜索 / 分类筛选，右边直接播，棋盘格底看得出透明
+  - 素材是 **640×360 的 VP9-alpha WebM**（24fps，约 10 秒，可首尾循环）+ 220×124 的 GIF 预览
+  - 十二类：待机 / 移动 / 点击回应 / 玩耍 / 工作 / 吃 / 睡觉 / 余额 / 碎碎念 / 节日 / 特效 / 日常
+  - 细节与全部动画见 **[dsh-pet/README.md](dsh-pet/README.md)** 与 **[dsh-pet/GALLERY.md](dsh-pet/GALLERY.md)**
+  - 播放依赖 PyAV（`pip install av numpy`），没装时自动退回 GIF 预览；**不能用 QtMultimedia**，
+    它解 VP9-alpha 会丢透明通道
+  - 素材来自 [PC2005-cloud/dsh-pet](https://github.com/PC2005-cloud/dsh-pet)，
+    形象为 **CC BY-NC-SA 4.0（非商业）**，授权细节见 **[dsh-pet/CREDITS.md](dsh-pet/CREDITS.md)**
 
 ## 长期记忆架构 · Memory Architecture
 
@@ -241,6 +251,8 @@ pyinstaller --noconfirm --onefile --windowed --name 大肥鱼桌宠 --add-data "
 | 桌宠.py                    | 主程序（全部逻辑）                                                                                                   |
 | ai_settings.py           | 接口设置（DeepSeek / Agnes / 自定义预设、配置读写、连接测试、设置面板）                                                               |
 | chatter.py               | 话唠模式（三档频率、素材门槛、情绪抽取、台词生成、免打扰）                                                                               |
+| anim_lib.py              | 动画库（VP9-alpha 解码、流式播放、浏览面板；PyAV 可选，缺则退回 GIF）                                                              |
+| dsh-pet/                 | 动画素材库：114 段 WebM + 109 张 GIF + catalog.json + GALLERY.md + CREDITS.md                                     |
 | work_panel.py            | 办公便利贴 + 工作提醒（面板 / 中文时间解析 / 提醒引擎）                                                                            |
 | memory/                  | 长期记忆引擎（存储 / 提取 / 检索 / 上下文 / 整理 / 记忆中心）                                                                      |
 | tests/                   | 自动化测试（test_modes.py / test_chatter.py / test_memory.py / test_integration.py / test_ai_settings.py，共 196 项） |
@@ -264,6 +276,14 @@ pyinstaller --noconfirm --onefile --windowed --name 大肥鱼桌宠 --add-data "
 本项目基于 [1190fasheqi/dafeiyu-pet](https://github.com/1190fasheqi/dafeiyu-pet)（鲸鱼娘·大肥鱼桌宠）二次开发，在其三视图行走、喂食、天气、系统监控的基础上，重做了多服务商接口设置，并新增办公便利贴、长期记忆与话唠模式。原始项目版权与署名归原作者所有。
 
 This project is a derivative work of [1190fasheqi/dafeiyu-pet](https://github.com/1190fasheqi/dafeiyu-pet). Original credits belong to its author.
+
+**动画素材**来自 [PC2005-cloud/dsh-pet](https://github.com/PC2005-cloud/dsh-pet)（MIT 代码 + 禁止商用的素材），
+角色形象「大肥鱼」适用 **CC BY-NC-SA 4.0（署名 · 非商业 · 相同方式共享）**。
+完整的署名链、能做什么不能做什么，见 **[dsh-pet/CREDITS.md](dsh-pet/CREDITS.md)**。
+
+**Animation assets** come from [PC2005-cloud/dsh-pet](https://github.com/PC2005-cloud/dsh-pet).
+The character is licensed under **CC BY-NC-SA 4.0** — attribution required, non-commercial only.
+See **[dsh-pet/CREDITS.md](dsh-pet/CREDITS.md)** for the full attribution chain.
 
 - **AI 对话 / 天气查询 / 系统监控 / PyInstaller 打包配置**：由 [Cpanoe](https://github.com/Cpanoe) 通过 [PR#3](https://github.com/1190fasheqi/dafeiyu-pet/pull/3) 贡献（DeepSeek API 聊天、wttr.in 天气、CPU/内存/GPU 监控、桌宠.spec）。
 - 合并时维护方修复：
