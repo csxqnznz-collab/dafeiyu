@@ -996,7 +996,7 @@ class WorkPanel(QWidget):
         if not self.pet:
             return
         if not self.pet._api_key():
-            self.append_sys("还没设置 Agnes AI Key，右键桌宠 → 设置 Key")
+            self.append_sys("还没设置 API Key，右键桌宠 → ⚙ 接口设置")
             return
         self.append_chat("pet", "……")
         self.pet._call_ds(text)

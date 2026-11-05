@@ -132,6 +132,7 @@ cp config.example.json config.json   # 然后把 key 填进去
 |---|---|---|
 | API Key / 接口配置 | `config.json` | 否（`.gitignore`） |
 | 今日工作 / 提醒 | `work_items.json` | 否 |
+| 话唠计数与最近台词 | `chatter_state.json` | 否 |
 | 长期记忆库 | `%APPDATA%\HJCDaFeiYu\database\memory.db` | 否（本就在用户目录） |
 | 记忆备份 | `%APPDATA%\HJCDaFeiYu\database\backups\` | 否 |
 | 错误日志 | `ai_error.log` | 否 |
@@ -149,6 +150,27 @@ python scripts/check_secrets.py --install-hook   # 装成 pre-commit，有密钥
 
 万一 Key 曾经提交过：**先吊销再清理历史**（`git filter-repo --path config.json --invert-paths`），
 不要只删文件——旧 commit 里还在。
+
+  ##### 话唠模式（新增）
+
+  - 右键 → **🗣 话唠模式**，四档：关闭 / 1 级 / 2 级 / 3 级
+    | 档位 | 频率 | 平均间隔 |
+    |---|---|---|
+    | 1 级 | 3 小时 5-10 条 | 18-36 分钟 |
+    | 2 级 | 2 小时 10-20 条 | 6-12 分钟 |
+    | 3 级 | 1 小时 20-30 条 | 2-3 分钟 |
+  - **有料才开口**：素材来自最近聊天、长期记忆、今日待办、用户画像；
+    一条都没有就跳过这一轮，不硬编故事、不假装记得没发生的事
+  - **八种情绪**按素材加权随机：好奇追问 / 抱怨 / 伤心 / 开心 / 无聊 / 担忧 / 思念 / 兴奋
+    （有没做完的活 → 更爱抱怨和担忧；你刚说过话 → 更爱追问；有旧记忆 → 更爱念叨）
+  - **台词跟记忆挂钩**：优先让 AI 按素材现写（一次生成 3 句备用，省请求），
+    例如「下午找IT谈网站，别冷落了鱼鱼」「等肯尼亚回款，咱们一起乐」；
+    没 Key 或接口挂了就用本地模板，把素材关键词填进句子
+  - **不烦人**：深夜 23:00-08:00 免打扰、你聊天后 3 分钟内不插嘴、
+    滚动窗口卡上限（3 级满 30 条/小时就停到最早的滚出去）
+  - 今日计数存在 `chatter_state.json`，菜单里能看到「今天已经念叨 N 句」；
+    「现在说一句（试试）」可以立刻看效果
+  - 参数：`config.json` 的 `chatter_level`（0-3）、`chatter_quiet`（免打扰时段，如 `["23:00","08:00"]`）
 
 ## 运行
 
@@ -190,6 +212,7 @@ pyinstaller --noconfirm --onefile --windowed --name 大肥鱼桌宠 --add-data "
 |------|------|
 | 桌宠.py | 主程序（全部逻辑） |
 | ai_settings.py | 接口设置（DeepSeek / Agnes / 自定义预设、配置读写、连接测试、设置面板） |
+| chatter.py | 话唠模式（三档频率、素材门槛、情绪抽取、台词生成、免打扰） |
 | work_panel.py | 办公便利贴 + 工作提醒（面板 / 中文时间解析 / 提醒引擎） |
 | memory/ | 长期记忆引擎（存储 / 提取 / 检索 / 上下文 / 整理 / 记忆中心） |
 | tests/ | 自动化测试（test_memory.py / test_integration.py / test_ai_settings.py） |

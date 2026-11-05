@@ -8,6 +8,11 @@
     "x": null,
     "y": null,
     "ai_provider": "agnes",
+    "chatter_level": 0,
+    "chatter_quiet": [
+        "23:00",
+        "08:00"
+    ],
     "ai_profiles": {
         "deepseek": {
             "key": "",

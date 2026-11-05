@@ -8,6 +8,7 @@ secrets.json
 
 # 运行时生成
 work_items.json
+chatter_state.json
 ai_error.log
 *.log
 memory-config.json

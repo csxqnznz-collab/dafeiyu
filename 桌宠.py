@@ -45,6 +45,7 @@ from work_panel import (WorkStore, WorkPanel, WorkSettingsDialog, ReminderEngine
                         item_label)
 import ai_settings
 from ai_settings import AISettingsDialog
+from chatter import ChatterBox, LEVELS as CHATTER_LEVELS
 
 # 长期记忆引擎（独立模块，出错不影响桌宠主流程）
 try:
@@ -406,6 +407,8 @@ class PetWindow(QWidget):
             "y": None,
             "ai_provider": "agnes",
             "ai_profiles": {},
+            "chatter_level": 0,
+            "chatter_quiet": ["23:00", "08:00"],
             "city": "汕头"
     })
 
@@ -515,6 +518,21 @@ class PetWindow(QWidget):
         self.timer.timeout.connect(self.tick)
         self.timer.start(TICK)
 
+        # 话唠模式（按记忆/聊天素材主动开口）
+        self._last_user_ts = 0.0
+        try:
+            self.chatter = ChatterBox(
+                self.cfg, save_cfg=self.save_cfg, memory=self.memory,
+                work_store=self.work_store, api_getter=self._ai_api,
+                state_path=os.path.join(APP_DIR, "chatter_state.json"),
+                logger=print, user_active=self._user_active_recently,
+                quiet=tuple(self.cfg.get("chatter_quiet") or ("23:00", "08:00")))
+            self.chatter.sig_say.connect(self._on_chatter_line)
+            QTimer.singleShot(12000, self.chatter.start)
+        except Exception as e:
+            print(f"[chatter] 初始化失败：{e}")
+            self.chatter = None
+
         self.bubble_font = QFont("Microsoft YaHei UI", 11)
 
         # 托盘
@@ -533,6 +551,37 @@ class PetWindow(QWidget):
         self.snap_into_screen()
         if self.cfg.get("passthrough", False):
             self._apply_passthrough(True)
+
+    # ---------- 话唠模式 ----------
+    def _user_active_recently(self):
+        """3 分钟内你说过话，就别插嘴"""
+        return time.time() - getattr(self, "_last_user_ts", 0.0) < 180
+
+    def _on_chatter_line(self, text):
+        self.say(text)
+        try:
+            if self.work_panel.isVisible():
+                self.work_panel.append_chat("pet", text)
+        except Exception:
+            pass
+
+    def set_chatter_level(self, lv):
+        if not self.chatter:
+            self.say("话唠模块没起来…")
+            return
+        self.say(self.chatter.set_level(lv))
+        try:
+            self.tray.setContextMenu(self._build_menu())
+        except Exception:
+            pass
+
+    def _chatter_now(self):
+        if not self.chatter:
+            self.say("话唠模块没起来…")
+            return
+        msg = self.chatter.say_now()
+        if msg:
+            self.say(msg)
 
     # ---------- AI 方法 ----------
     def _api_key(self):
@@ -632,6 +681,7 @@ class PetWindow(QWidget):
         return t
 
     def _call_ds(self, user_msg):
+        self._last_user_ts = time.time()
         if self.ds_busy:
             self.say("等等，上一句还没回完呢")
             return
@@ -1227,6 +1277,27 @@ class PetWindow(QWidget):
         model_menu.addSeparator()
         model_menu.addAction("接口设置…", self._open_ai_settings)
         m.addAction("⚙ 接口设置（DeepSeek / Agnes / 自定义）", self._open_ai_settings)
+
+        # 话唠模式：关 / 1 / 2 / 3 级
+        chat_menu = m.addMenu("🗣 话唠模式")
+        cur_lv = self.chatter.level() if getattr(self, "chatter", None) else 0
+        for lv in (0, 1, 2, 3):
+            if lv == 0:
+                a = chat_menu.addAction("关闭（安静）")
+            else:
+                spec = CHATTER_LEVELS[lv]
+                a = chat_menu.addAction(f"{lv} 级 · {spec['window_h']} 小时 "
+                                        f"{spec['lo']}-{spec['hi']} 条")
+            a.setCheckable(True)
+            a.setChecked(cur_lv == lv)
+            a.triggered.connect(lambda _, k=lv: self.set_chatter_level(k))
+        chat_menu.addSeparator()
+        cnt = self.chatter.today_count() if getattr(self, "chatter", None) else 0
+        info = chat_menu.addAction(f"今天已经念叨 {cnt} 句")
+        info.setEnabled(False)
+        act = chat_menu.addAction("现在说一句（试试）", self._chatter_now)
+        act.setEnabled(self.chatter is not None)
+
         m.addAction("查看天气", self._get_weather)
         m.addSeparator()
         m.addAction("📌 今日工作 / 便利贴", self.open_work_panel)
