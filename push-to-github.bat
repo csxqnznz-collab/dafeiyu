@@ -1,6 +1,6 @@
 @echo off
 chcp 65001 >nul
-title Push dafeiyu-pet to GitHub
+title Push dafeiyu to GitHub
 cd /d "%~dp0"
 
 echo ==========================================================
@@ -27,18 +27,18 @@ goto end
 :failed
 echo.
 echo ================= FAILED ==================
-echo 1) Login cancelled / not logged in
-echo    -> Run this again and choose "Sign in with your browser".
+echo 1) Login cancelled, or not logged in.
+echo    Run this again and choose "Sign in with your browser".
 echo.
-echo 2) 403 / Permission denied
-echo    -> The origin repo is NOT under your account.
-echo       Create an empty repo on your own GitHub account, then run:
-echo         git remote set-url origin https://github.com/YOUR_NAME/dafeiyu-pet.git
-echo         git push -u origin main
+echo 2) 403 Permission denied.
+echo    The origin repo is not under your account.
+echo    Create an empty repo on your account, then run:
+echo      git remote set-url origin https://github.com/YOUR_NAME/dafeiyu.git
+echo      git push -u origin main
 echo.
-echo 3) Connection reset / timeout
-echo    -> Turn on your proxy (Clash 127.0.0.1:7890) and retry:
-echo         git config --global http.proxy http://127.0.0.1:7890
+echo 3) Connection reset or timeout.
+echo    Turn on your proxy and set it for git, then retry:
+echo      git config --global http.proxy http://127.0.0.1:7890
 
 :end
 echo.

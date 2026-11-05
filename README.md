@@ -24,6 +24,8 @@ A transparent anime-style desktop pet for Windows. She wanders around your deskt
 ## 快速开始 · Quick Start
 
 ```bash
+git clone https://github.com/csxqnznz-collab/dafeiyu.git
+cd dafeiyu
 pip install -r requirements.txt
 python 桌宠.py            # 或双击「启动桌宠.bat」
 ```
