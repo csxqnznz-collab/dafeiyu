@@ -282,7 +282,7 @@ This project is a derivative work of [1190fasheqi/dafeiyu-pet](https://github.co
 If you like my works or find them helpful, please consider buying me a cup of coffee ☕️. It inspires me to create and maintain more projects in the future. 🦾
 
 <p align="center">
-  <img src="docs/wechat-pay.png" width="260" alt="微信支付收款码 · WeChat Pay QR code">
+  <img src="docs/wechat-pay.png" width="280" alt="微信支付收款码 · WeChat Pay QR code">
 </p>
 
 <p align="center"><sub>微信扫码 · 推荐使用微信支付 ｜ Scan with WeChat to buy me a coffee</sub></p>
