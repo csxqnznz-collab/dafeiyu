@@ -17,7 +17,7 @@ A transparent anime-style desktop pet for Windows. She wanders around your deskt
 | 大小四档  | 极小 / 小 / 中 / 大，极小只有 93px（小的正好一半），气泡自动加宽加高   | Four sizes, the smallest is just 93px tall; speech bubble auto-resizes                           |
 | AI 聊天 | 单击弹聊天框，接 DeepSeek / Agnes / 自定义接口，回复短句不啰嗦   | Click to chat through DeepSeek / Agnes / any OpenAI-compatible API                               |
 | 办公便利贴 | 头顶便利贴记今日工作，一句话拆多条，到点提醒，下班回顾                 | Sticky-note panel for today's tasks, Chinese time parsing, reminders, end-of-day review          |
-| 长期记忆  | 本地 SQLite 五层记忆，自动提炼、按需回忆、睡眠整理               | Five-layer local memory in SQLite: auto-extract, recall on demand, nightly consolidation         |
+| 长期记忆  | 本地 SQLite 五层记忆 + 可塑性记忆：自动提炼、按需回忆、合并重塑与遗忘     | Five-layer local memory in SQLite with Plastic Memory: auto-extract, recall, merge, reshape, fade |
 | 话唠模式  | 三档频率，按聊天与记忆主动开口，八种情绪，深夜免打扰                  | Three chatter levels, memory-driven small talk, eight moods, quiet hours                         |
 | 数据隔离  | Key / 工作项 / 记忆库全部不入仓库，附密钥扫描脚本               | No keys or personal data in the repo; bundled secret scanner                                     |
 
@@ -244,7 +244,7 @@ pyinstaller --noconfirm --onefile --windowed --name 大肥鱼桌宠 --add-data "
 | work_panel.py            | 办公便利贴 + 工作提醒（面板 / 中文时间解析 / 提醒引擎）                                                                            |
 | memory/                  | 长期记忆引擎（存储 / 提取 / 检索 / 上下文 / 整理 / 记忆中心）                                                                      |
 | tests/                   | 自动化测试（test_modes.py / test_chatter.py / test_memory.py / test_integration.py / test_ai_settings.py，共 196 项） |
-| docs/                    | README 展示图（preview.png / sizes.png）                                                                         |
+| docs/                    | README 展示图（preview.png / sizes.png）+ 微信收款码（wechat-pay.png）                                                 |
 | PUBLISH.md               | 发布到 GitHub 的步骤（About 简介、Topics、Release 说明、推送排错）                                                             |
 | scripts/check_secrets.py | 提交前密钥扫描（可装成 pre-commit 钩子）                                                                                  |
 | config.example.json      | 配置模板（复制成 config.json 再填 Key）                                                                                |
