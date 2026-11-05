@@ -1,5 +1,31 @@
 # CHANGELOG
 
+## 1.4.0 — 2026-11-05 · 动画库（复刻 dsh-pet 全套透明动画）
+
+### 新增
+- **114 段 640×360 VP9-alpha 透明动画**：`dsh-pet/assets/webm/`，24fps，约 10 秒，可首尾循环
+- **109 张 220×124 GIF 预览**：`dsh-pet/assets/preview/`，拼音文件名（跨平台不乱码）
+- **`catalog.json`**：机器可读索引，含 id / 中文名 / 分类 / 时长 / 帧率 / 体积 / 双格式路径
+- **动画库面板**（右键 → 🎬 动画库）：中文名与拼音双搜、十二类筛选、棋盘格透明预览、重播、
+  复制 raw 直链、打开所在目录
+- **`scripts/build_animations_catalog.py`**：自动配对「中文名 webm」与「拼音名 GIF」
+  （先精确匹配、再相似度贪心），支持 `--check` / `--gallery` / `--markdown`
+- **`dsh-pet/GALLERY.md`**：按分类的 GIF 画廊，走 raw 直链，GitHub 上直接动
+
+### 技术要点
+- VP9 的 alpha 必须用 **libvpx 解码器**解：`av.CodecContext.create("libvpx-vp9", "r")`。
+  ffmpeg 自带的 `vp9` 解码器会把 alpha 层丢掉，画面变黑底；PyAV 默认走的就是后者
+- 流式解码（`FrameDecoder`）：241 帧 × 640×360×4 ≈ 222MB，不能整段缓存进内存
+- PyAV 是可选依赖，没装时 `anim_lib` 自动退回 `QMovie` 播 GIF，功能不中断
+- `check_secrets.py` 的 `SKIP_EXT` 补上 `.webm` / `.mov` / `.mp3` 等，避免拿 55MB 二进制当文本扫
+
+### 授权
+- 素材来自 [PC2005-cloud/dsh-pet](https://github.com/PC2005-cloud/dsh-pet)（MIT 代码 / 素材禁止商用）
+- 角色形象「大肥鱼」为 **CC BY-NC-SA 4.0**：署名 · 非商业 · 相同方式共享，详见 `dsh-pet/CREDITS.md`
+
+### 测试
+- 新增 `tests/test_anim_lib.py` 37 项；全套 233 项通过
+
 ## 1.3.0 — 2026-11-05 · 极小模式 + 横向行走
 
 ### 新增
