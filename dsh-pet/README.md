@@ -5,6 +5,16 @@
 
 > **在桌宠里看**：右键桌宠 → **🎬 动画库（114 段）**，左侧搜索/分类，右侧直接播（真 alpha，棋盘格能看出透明）。
 
+<p align="center">
+  <img src="assets/preview/daiji-huxi-xiuxian.gif" width="176" alt="待机呼吸休闲" title="待机呼吸休闲">
+  <img src="assets/preview/chi-xigua.gif" width="176" alt="吃西瓜" title="吃西瓜">
+  <img src="assets/preview/keai-zhaiwu.gif" width="176" alt="可爱宅舞" title="可爱宅舞">
+  <img src="assets/preview/lu-mao.gif" width="176" alt="撸猫" title="撸猫">
+  <img src="assets/preview/xie-daima.gif" width="176" alt="写代码" title="写代码">
+  <img src="assets/preview/fang-yanhua.gif" width="176" alt="放烟花" title="放烟花">
+</p>
+<p align="center"><sub>待机呼吸休闲 · 吃西瓜 · 可爱宅舞 · 撸猫 · 写代码 · 放烟花（这里用相对路径，<a href="GALLERY.md">GALLERY.md</a> 里是 raw 直链）</sub></p>
+
 ---
 
 ## 规格 / Specs
