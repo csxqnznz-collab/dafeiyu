@@ -3,6 +3,12 @@
 版本 1.0.0 · 2026-11-04
 核心原则：**Remember intelligently, retrieve selectively, and preserve everything important.**
 
+## 0. 设计摘要 · Design Abstract
+
+本项目采用一种融合分层记忆、动态检索与可塑性记忆（Plastic Memory）的 AI 长期记忆架构，赋予桌面 AI 宠物跨会话、跨重启的持续记忆能力。系统以本地数据库为基础，将记忆划分为核心记忆、用户画像、事件记忆、知识记忆和原始对话五个层级，通过自动提取、语义检索、关联分析、记忆合并与动态更新，让 AI 不仅能够记住用户的身份、偏好、经历和共同互动，还能够像人类大脑一样，根据新的信息和长期互动不断调整、强化、修正或淡化已有记忆。记忆不再是静态存档，而是一个具有形成、巩固、联想、重塑和遗忘能力的动态系统。同时，通过按需检索和上下文动态注入，AI 无需重复读取全部历史对话，就能在有限的 Context Window 中保持记忆的连续性与准确性，实现低 Token 消耗、长期个性化和持续进化的 AI 陪伴体验。
+
+A long-term memory architecture that fuses layered memory, dynamic retrieval and Plastic Memory: five layers (core, profile, episodic, knowledge, raw dialogue) are continuously extracted, retrieved, associated, merged and updated, so memory forms, consolidates, associates, reshapes and fades instead of being a static archive — keeping continuity inside a limited context window at low token cost.
+
 ---
 
 ## 1. 模块结构

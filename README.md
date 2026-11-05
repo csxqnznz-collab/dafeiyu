@@ -119,6 +119,16 @@ Run it, right-click the pet → **⚙ API Settings** → pick a provider → pas
   - 模型 404 自动降级到该服务商的默认模型，并把配置改回可用值（下次不再白跑）
   - 配置存在 `config.json` 的 `ai_profiles` 下，旧版单 Key 配置启动时自动迁移
 
+## 长期记忆架构 · Memory Architecture
+
+本项目采用一种融合**分层记忆、动态检索与可塑性记忆（Plastic Memory）**的 AI 长期记忆架构，赋予桌面 AI 宠物跨会话、跨重启的持续记忆能力。
+
+系统以本地数据库为基础，将记忆划分为**核心记忆、用户画像、事件记忆、知识记忆和原始对话**五个层级，通过自动提取、语义检索、关联分析、记忆合并与动态更新，让 AI 不仅能够记住用户的身份、偏好、经历和共同互动，还能够像人类大脑一样，根据新的信息和长期互动不断调整、强化、修正或淡化已有记忆。
+
+记忆不再是静态存档，而是一个具有**形成、巩固、联想、重塑和遗忘**能力的动态系统。同时，通过按需检索和上下文动态注入，AI 无需重复读取全部历史对话，就能在有限的 Context Window 中保持记忆的连续性与准确性，实现**低 Token 消耗、长期个性化和持续进化**的 AI 陪伴体验。
+
+> This project implements a long-term memory architecture that fuses **layered memory, dynamic retrieval and Plastic Memory**, giving the desktop pet memory that survives across sessions and restarts. Memories are organised into five layers — core memory, user profile, episodic memory, knowledge memory and raw dialogue — and are continuously extracted, semantically retrieved, associated, merged and updated, so the AI not only remembers who you are, what you prefer and what you have been through together, but also strengthens, corrects or gradually fades old memories the way a human brain does. Memory is no longer a static archive but a dynamic system capable of formation, consolidation, association, reshaping and forgetting. With on-demand retrieval and context injection, the AI keeps continuity and accuracy inside a limited context window — low token cost, long-term personalisation, continuously evolving companionship.
+
 ## 接口配置（给新装的人）
 
 ```bash
@@ -270,6 +280,12 @@ This project is a derivative work of [1190fasheqi/dafeiyu-pet](https://github.co
 如果你喜欢我的作品或者发现它们对你有所帮助，可以考虑给我买一杯咖啡 ☕️。这将激励我在未来创作和维护更多的项目。🦾
 
 If you like my works or find them helpful, please consider buying me a cup of coffee ☕️. It inspires me to create and maintain more projects in the future. 🦾
+
+<p align="center">
+  <img src="docs/wechat-pay.png" width="260" alt="微信支付收款码 · WeChat Pay QR code">
+</p>
+
+<p align="center"><sub>微信扫码 · 推荐使用微信支付 ｜ Scan with WeChat to buy me a coffee</sub></p>
 
 
 
